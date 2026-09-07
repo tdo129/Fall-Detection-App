@@ -8,6 +8,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 LogBox.ignoreLogs([
   '@firebase/firestore',
   'WebChannelConnection RPC',
+  'Cannot connect to Expo CLI',
 ]);
 
 export default function App() {
