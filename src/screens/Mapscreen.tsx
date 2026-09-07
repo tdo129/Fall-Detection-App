@@ -24,7 +24,7 @@ import LeafletMap, {
 import { getRouteBetweenPoints, RouteResult } from '../services/routeService';
 
 const { width } = Dimensions.get('window');
-const BOTTOM_SHEET_HEIGHT = 220;
+const BOTTOM_SHEET_HEIGHT = 235;
 
 function formatCoord(n?: number, decimals = 6) {
   if (n === undefined || n === null) return '--';
@@ -334,7 +334,7 @@ export default function MapScreen() {
       </View>
 
       {/* Quick Center Toggle Buttons on Right Side */}
-      <View style={styles.sideButtonsWrap}>
+      <View style={[styles.sideButtonsWrap, { bottom: sheetOpen ? BOTTOM_SHEET_HEIGHT + 14 : 95 }]}>
         {/* Fit both */}
         <TouchableOpacity
           style={[styles.sideIconBtn, SHADOW.md]}
@@ -365,7 +365,7 @@ export default function MapScreen() {
 
       {/* Sheet toggle */}
       <TouchableOpacity
-        style={[styles.sheetToggle, SHADOW.md]}
+        style={[styles.sheetToggle, SHADOW.md, { bottom: sheetOpen ? BOTTOM_SHEET_HEIGHT + 14 : 95 }]}
         onPress={() => setSheetOpen(!sheetOpen)}
         activeOpacity={0.8}
       >
@@ -374,7 +374,7 @@ export default function MapScreen() {
 
       {/* Bottom info sheet */}
       <Animated.View style={[styles.bottomSheet, SHADOW.lg, { transform: [{ translateY: sheetTranslate }] }]}>
-        <LinearGradient colors={['#161B22', '#0D1117']} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['#FFFFFF', '#F8FAFC']} style={StyleSheet.absoluteFill} />
         <View style={styles.sheetHandle} />
         <View style={styles.sheetContent}>
           {/* Coordinates row */}
@@ -558,7 +558,6 @@ const styles = StyleSheet.create({
   sideButtonsWrap: {
     position: 'absolute',
     right: SPACING.xl,
-    bottom: BOTTOM_SHEET_HEIGHT + 24,
     gap: 10,
     zIndex: 5,
   },
@@ -577,18 +576,17 @@ const styles = StyleSheet.create({
   sheetToggle: {
     position: 'absolute',
     left: SPACING.xl,
-    bottom: BOTTOM_SHEET_HEIGHT + 24,
     width: 38,
     height: 38,
     borderRadius: 19,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(0,0,0,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 5,
   },
-  sheetToggleText: { color: COLORS.textSecondary, fontSize: FONT.sm },
+  sheetToggleText: { color: COLORS.textPrimary, fontSize: FONT.sm, fontWeight: '700' },
   bottomSheet: {
     position: 'absolute',
     bottom: 0,
@@ -598,7 +596,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: RADIUS.xxl,
     borderTopRightRadius: RADIUS.xxl,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
+    borderColor: 'rgba(0,0,0,0.08)',
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
     zIndex: 4,
@@ -607,22 +605,28 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(0,0,0,0.15)',
+    backgroundColor: '#CBD5E1',
     alignSelf: 'center',
-    marginTop: SPACING.md,
+    marginTop: 10,
   },
-  sheetContent: { flex: 1, padding: SPACING.lg, paddingTop: SPACING.md },
-  coordRow: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md },
+  sheetContent: {
+    flex: 1,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.xs,
+    paddingBottom: 85,
+    justifyContent: 'flex-start',
+  },
+  coordRow: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm },
   coordItem: { flex: 1, alignItems: 'center' },
   coordLabel: {
     fontSize: FONT.xs,
-    color: COLORS.textTertiary,
+    color: COLORS.textSecondary,
     fontWeight: '700',
     letterSpacing: 0.5,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   coordValue: { fontSize: FONT.md, fontWeight: '700', color: COLORS.textPrimary, letterSpacing: -0.5 },
-  coordDivider: { width: 1, height: 40, backgroundColor: COLORS.border, marginHorizontal: SPACING.sm },
+  coordDivider: { width: 1, height: 36, backgroundColor: COLORS.border, marginHorizontal: SPACING.sm },
   sheetFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
