@@ -163,15 +163,15 @@ export default function HistoryScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       <LinearGradient
-        colors={['#0D1117', '#161B22']}
+        colors={['#F6F8FA', '#EEF2F6']}
         style={StyleSheet.absoluteFill}
       />
 
       {/* Header */}
       <LinearGradient
-        colors={['rgba(13,17,23,1)', 'rgba(13,17,23,0)']}
+        colors={['rgba(246,248,250,1)', 'rgba(246,248,250,0)']}
         style={styles.headerGradient}
         pointerEvents="none"
       />
@@ -272,12 +272,13 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full,
     borderWidth: 1,
     borderColor: COLORS.border,
+    backgroundColor: '#FFFFFF',
     paddingVertical: SPACING.sm,
     alignItems: 'center',
     overflow: 'hidden',
   },
   filterBtnActive: { borderColor: COLORS.primary },
-  filterText: { fontSize: FONT.sm, color: COLORS.textTertiary, fontWeight: '600' },
+  filterText: { fontSize: FONT.sm, color: COLORS.textSecondary, fontWeight: '600' },
   filterTextActive: { color: '#fff', fontWeight: '700' },
 
   listContent: { paddingHorizontal: SPACING.xl, paddingBottom: 100 },

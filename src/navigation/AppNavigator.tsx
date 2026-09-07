@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import DashboardScreen from '../screens/DashboardScreen';
-import MapScreen from '../screens/MapScreen';
+import MapScreen from '../screens/Mapscreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import { useDevice } from '../context/DeviceContext';
@@ -39,14 +39,14 @@ function CustomTabBar({ state, descriptors, navigation }: TabBarProps) {
     <View style={[styles.tabBarWrapper, { paddingBottom: insets.bottom }]}>
       {/* Gradient blur overlay */}
       <LinearGradient
-        colors={['rgba(13,17,23,0)', 'rgba(13,17,23,0.98)']}
+        colors={['rgba(246,248,250,0)', 'rgba(246,248,250,0.98)']}
         style={styles.tabGradient}
         pointerEvents="none"
       />
 
       <View style={[styles.tabBar]}>
         <LinearGradient
-          colors={['#1C2333', '#161B22']}
+          colors={['#FFFFFF', '#F8FAFC']}
           style={StyleSheet.absoluteFill}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
@@ -160,14 +160,15 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     borderRadius: RADIUS.xxl,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
     height: 64,
+    backgroundColor: '#FFFFFF',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.10,
+    shadowRadius: 14,
+    elevation: 8,
   },
   activePill: {
     position: 'absolute',
@@ -202,7 +203,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#1C2333',
+    borderColor: '#FFFFFF',
   },
   badgeText: { fontSize: 9, color: '#fff', fontWeight: '900' },
 });

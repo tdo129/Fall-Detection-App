@@ -8,26 +8,23 @@ import {
   Animated,
   Dimensions,
   StatusBar,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
-import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
 import { useDevice } from '../context/DeviceContext';
 import { COLORS, FONT, RADIUS, SHADOW, SPACING } from '../constants/theme';
+import LeafletMap, {
+  LeafletMapRef,
+  MapTileType,
+  openNavigationApp,
+  LocationCoord,
+} from '../components/LeafletMap';
+import { getRouteBetweenPoints, RouteResult } from '../services/routeService';
 
-const { width, height } = Dimensions.get('window');
-const BOTTOM_SHEET_HEIGHT = 200;
-
-const DARK_MAP_STYLE = [
-  { elementType: 'geometry', stylers: [{ color: '#0D1117' }] },
-  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#8ab4f8' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#1d2c4d' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#304a7d' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#316da5' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0e1626' }] },
-  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#1a2535' }] },
-  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2f3948' }] },
-];
+const { width } = Dimensions.get('window');
+const BOTTOM_SHEET_HEIGHT = 220;
 
 function formatCoord(n?: number, decimals = 6) {
   if (n === undefined || n === null) return '--';
@@ -36,35 +33,41 @@ function formatCoord(n?: number, decimals = 6) {
 
 function formatTime(iso?: string) {
   if (!iso) return '--';
-  try { return new Date(iso).toLocaleTimeString('vi-VN'); }
-  catch { return iso; }
+  try {
+    return new Date(iso).toLocaleTimeString('vi-VN');
+  } catch {
+    return iso;
+  }
 }
 
 export default function MapScreen() {
-  const { deviceData, settings } = useDevice();
-  const mapRef = useRef<MapView>(null);
-  const markerBounce = useRef(new Animated.Value(0)).current;
+  const { deviceData } = useDevice();
+  const mapRef = useRef<LeafletMapRef>(null);
   const sheetAnim = useRef(new Animated.Value(1)).current;
-  const [mapType, setMapType] = useState<'standard' | 'satellite'>('standard');
+
+  const [mapType, setMapType] = useState<MapTileType>('standard');
   const [sheetOpen, setSheetOpen] = useState(true);
 
+  // Supervisor & Route Navigation states
+  const [supervisorLoc, setSupervisorLoc] = useState<LocationCoord | null>(null);
+  const [routeData, setRouteData] = useState<RouteResult | null>(null);
+  const [isNavigating, setIsNavigating] = useState(true);
+  const [loadingRoute, setLoadingRoute] = useState(true);
+  const [isSimulatedLocation, setIsSimulatedLocation] = useState(false);
+  const [locationStatusText, setLocationStatusText] = useState('Đang lấy GPS điện thoại của bạn...');
+
+  // Target (Fallen person / ESP32) coordinates
   const lat = deviceData?.latitude ?? 10.853868;
   const lng = deviceData?.longitude ?? 106.7;
   const isFall = deviceData?.fall_detected ?? false;
-
-  // Bounce marker on GPS update
-  useEffect(() => {
-    Animated.sequence([
-      Animated.timing(markerBounce, { toValue: -12, duration: 200, useNativeDriver: true }),
-      Animated.spring(markerBounce, { toValue: 0, tension: 200, friction: 5, useNativeDriver: true }),
-    ]).start();
-  }, [lat, lng]);
 
   // Bottom sheet slide animation
   useEffect(() => {
     Animated.spring(sheetAnim, {
       toValue: sheetOpen ? 1 : 0,
-      tension: 100, friction: 12, useNativeDriver: true,
+      tension: 100,
+      friction: 12,
+      useNativeDriver: true,
     }).start();
   }, [sheetOpen]);
 
@@ -73,72 +76,184 @@ export default function MapScreen() {
     outputRange: [BOTTOM_SHEET_HEIGHT + 40, 0],
   });
 
+  /**
+   * Automatically fetch supervisor phone's real GPS on mount
+   * and calculate route to the fallen person
+   */
+  useEffect(() => {
+    let locationSubscription: Location.LocationSubscription | null = null;
+    let isMounted = true;
+
+    const autoLocateAndRoute = async () => {
+      setLoadingRoute(true);
+      setLocationStatusText('Đang kết nối GPS điện thoại người giám hộ...');
+
+      let supLat: number = lat - 0.0105;
+      let supLng: number = lng - 0.0082;
+
+      try {
+        // 1. Request permission from the supervisor's phone
+        const { status } = await Location.requestForegroundPermissionsAsync();
+
+        if (status === 'granted') {
+          // Check last known position for instant responsiveness
+          const lastLoc = await Location.getLastKnownPositionAsync({});
+          if (lastLoc && isMounted) {
+            supLat = lastLoc.coords.latitude;
+            supLng = lastLoc.coords.longitude;
+            setSupervisorLoc({ latitude: supLat, longitude: supLng });
+            setIsSimulatedLocation(false);
+            setLocationStatusText('Đã lấy vị trí GPS từ điện thoại');
+          }
+
+          // Fetch fresh, accurate position
+          const curLoc = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+
+          if (isMounted) {
+            supLat = curLoc.coords.latitude;
+            supLng = curLoc.coords.longitude;
+            setSupervisorLoc({ latitude: supLat, longitude: supLng });
+            setIsSimulatedLocation(false);
+            setLocationStatusText('Đã lấy vị trí GPS từ điện thoại');
+          }
+
+          // Watch position continuously as supervisor moves
+          locationSubscription = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.Balanced,
+              distanceInterval: 10,
+              timeInterval: 5000,
+            },
+            async (newLoc) => {
+              if (!isMounted) return;
+              const newPoint = {
+                latitude: newLoc.coords.latitude,
+                longitude: newLoc.coords.longitude,
+              };
+              setSupervisorLoc(newPoint);
+            }
+          );
+        } else {
+          // Permission not granted or running in Web/Emulator without GPS
+          if (isMounted) {
+            setIsSimulatedLocation(true);
+            setLocationStatusText('GPS giả lập (Hãy cấp quyền vị trí trên điện thoại)');
+            setSupervisorLoc({ latitude: supLat, longitude: supLng });
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          setIsSimulatedLocation(true);
+          setLocationStatusText('Đang dùng vị trí mẫu (Không bật được GPS)');
+          setSupervisorLoc({ latitude: supLat, longitude: supLng });
+        }
+      }
+
+      // 2. Fetch driving route between supervisor and fallen person
+      try {
+        const route = await getRouteBetweenPoints(supLat, supLng, lat, lng);
+        if (isMounted) {
+          setRouteData(route);
+          setIsNavigating(true);
+        }
+      } catch (err) {
+        // Fallback handled inside routeService
+      } finally {
+        if (isMounted) {
+          setLoadingRoute(false);
+        }
+      }
+    };
+
+    autoLocateAndRoute();
+
+    return () => {
+      isMounted = false;
+      locationSubscription?.remove();
+    };
+  }, [lat, lng]);
+
+  // Fit all bounds when route is ready
+  useEffect(() => {
+    if (routeData && isNavigating) {
+      const timer = setTimeout(() => {
+        mapRef.current?.fitAllBounds();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [routeData]);
+
   const centerOnDevice = () => {
-    mapRef.current?.animateToRegion({
-      latitude: lat,
-      longitude: lng,
-      latitudeDelta: 0.005,
-      longitudeDelta: 0.005,
-    }, 800);
+    mapRef.current?.centerOnLocation(lat, lng);
+  };
+
+  const centerOnSupervisor = () => {
+    mapRef.current?.centerOnSupervisor();
+  };
+
+  const centerOnAll = () => {
+    mapRef.current?.fitAllBounds();
+  };
+
+  const handleOpenTurnByTurn = () => {
+    openNavigationApp(
+      lat,
+      lng,
+      supervisorLoc?.latitude,
+      supervisorLoc?.longitude,
+      isFall ? 'Khẩn cấp: Người thân té ngã' : 'Vị trí người thân'
+    );
   };
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* Map */}
-      <MapView
+      {/* Leaflet OpenStreetMap View with Supervisor & Route */}
+      <LeafletMap
         ref={mapRef}
-        style={StyleSheet.absoluteFill}
-        provider={PROVIDER_GOOGLE}
-        customMapStyle={mapType === 'standard' ? DARK_MAP_STYLE : []}
+        latitude={lat}
+        longitude={lng}
+        isFall={isFall}
         mapType={mapType}
-        initialRegion={{
-          latitude: lat, longitude: lng,
-          latitudeDelta: 0.008, longitudeDelta: 0.008,
-        }}
-        showsCompass={false}
-      >
-        <Circle
-          center={{ latitude: lat, longitude: lng }}
-          radius={50}
-          fillColor={isFall ? 'rgba(255,69,58,0.12)' : 'rgba(10,132,255,0.10)'}
-          strokeColor={isFall ? 'rgba(255,69,58,0.5)' : 'rgba(10,132,255,0.5)'}
-          strokeWidth={1.5}
-        />
-        <Marker coordinate={{ latitude: lat, longitude: lng }} anchor={{ x: 0.5, y: 1 }}>
-          <Animated.View style={{ transform: [{ translateY: markerBounce }] }}>
-            <View style={[styles.markerOuter, { borderColor: isFall ? COLORS.danger : COLORS.primary }]}>
-              <View style={[styles.markerInner, { backgroundColor: isFall ? COLORS.danger : COLORS.primary }]}>
-                <Text style={styles.markerIcon}>{isFall ? '🚨' : '📍'}</Text>
-              </View>
-            </View>
-            <View style={[styles.markerTail, { borderTopColor: isFall ? COLORS.danger : COLORS.primary }]} />
-          </Animated.View>
-        </Marker>
-      </MapView>
+        zoom={16}
+        interactive={true}
+        supervisorLocation={supervisorLoc}
+        routeCoordinates={isNavigating && routeData ? routeData.coordinates : undefined}
+        style={StyleSheet.absoluteFill}
+      />
 
       {/* Top gradient overlay */}
       <LinearGradient
-        colors={['rgba(13,17,23,0.95)', 'rgba(13,17,23,0.0)']}
+        colors={['rgba(246,248,250,0.95)', 'rgba(246,248,250,0.0)']}
         style={styles.topOverlay}
         pointerEvents="none"
       />
 
       {/* Top bar */}
       <View style={styles.topBar}>
-        <View>
-          <Text style={styles.topTitle}>Bản đồ</Text>
+        <View style={styles.titleWrap}>
+          <Text style={styles.topTitle}>Bản đồ cứu hộ</Text>
           <Text style={styles.topSub}>
-            {isFall ? '🚨 Vị trí té ngã' : '📡 Cập nhật theo thời gian thực'}
+            {isFall ? '🚨 CẢNH BÁO TÉ NGÃ — ĐANG DẪN ĐƯỜNG' : '📡 Lộ trình cứu hộ thời gian thực'}
           </Text>
         </View>
+
+        {/* Map Type Switcher */}
         <View style={styles.typeToggle}>
+          <TouchableOpacity
+            style={[styles.typeBtn, mapType === 'dark' && styles.typeBtnActive]}
+            onPress={() => setMapType('dark')}
+          >
+            <Text style={[styles.typeBtnText, mapType === 'dark' && styles.typeBtnTextActive]}>Tối</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.typeBtn, mapType === 'standard' && styles.typeBtnActive]}
             onPress={() => setMapType('standard')}
           >
-            <Text style={[styles.typeBtnText, mapType === 'standard' && styles.typeBtnTextActive]}>Bản đồ</Text>
+            <Text style={[styles.typeBtnText, mapType === 'standard' && styles.typeBtnTextActive]}>Đường</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.typeBtn, mapType === 'satellite' && styles.typeBtnActive]}
@@ -149,17 +264,110 @@ export default function MapScreen() {
         </View>
       </View>
 
-      {/* Center button */}
-      <TouchableOpacity style={[styles.centerBtn, SHADOW.primary]} onPress={centerOnDevice}>
-        <LinearGradient colors={[COLORS.primary, COLORS.primaryDark]} style={styles.centerBtnGradient}>
-          <Text style={styles.centerBtnIcon}>⊕</Text>
-        </LinearGradient>
-      </TouchableOpacity>
+      {/* Top Navigation Route Card (Always visible once route is calculated) */}
+      <View style={[styles.routeFloatingCard, SHADOW.md]}>
+        <LinearGradient
+          colors={['#FFFFFF', '#F8FAFC']}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+        
+        {loadingRoute ? (
+          <View style={styles.routeLoadingRow}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+            <Text style={styles.routeLoadingText}>{locationStatusText}</Text>
+          </View>
+        ) : (
+          <>
+            <View style={styles.routeHeader}>
+              <View style={styles.routeHeaderLeft}>
+                <View style={styles.routeIconBox}>
+                  <Text style={{ fontSize: 20 }}>🚗</Text>
+                </View>
+                <View>
+                  <View style={styles.routeStatsRow}>
+                    <Text style={styles.routeDistanceText}>
+                      {routeData ? `${routeData.distanceKm} km` : '--'}
+                    </Text>
+                    <Text style={styles.routeDot}>•</Text>
+                    <Text style={styles.routeDurationText}>
+                      {routeData ? `~${routeData.durationMin} phút di chuyển` : '--'}
+                    </Text>
+                  </View>
+                  <Text style={styles.routeSubtitle}>
+                    {isSimulatedLocation
+                      ? '⚠️ Vị trí mô phỏng (Điện thoại chưa cấp GPS)'
+                      : 'Từ điện thoại của bạn 👤 đến người bị té 🚨'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Fit view button */}
+              <TouchableOpacity
+                style={styles.fitViewBtn}
+                onPress={centerOnAll}
+                activeOpacity={0.7}
+                accessibilityLabel="Xem toàn cảnh"
+              >
+                <Text style={styles.fitViewText}>⛶ Toàn cảnh</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Turn-by-Turn Google Maps Navigation Action */}
+            <TouchableOpacity
+              style={styles.voiceNavBtn}
+              onPress={handleOpenTurnByTurn}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={['#0A84FF', '#0056B3']}
+                style={styles.voiceNavGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Text style={styles.voiceNavText}>🧭 Mở Google Maps chỉ đường bằng giọng nói</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+
+      {/* Quick Center Toggle Buttons on Right Side */}
+      <View style={styles.sideButtonsWrap}>
+        {/* Fit both */}
+        <TouchableOpacity
+          style={[styles.sideIconBtn, SHADOW.md]}
+          onPress={centerOnAll}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.sideIconText}>⛶</Text>
+        </TouchableOpacity>
+
+        {/* Center on supervisor */}
+        <TouchableOpacity
+          style={[styles.sideIconBtn, SHADOW.md, { borderColor: '#30D158' }]}
+          onPress={centerOnSupervisor}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.sideIconText}>👤</Text>
+        </TouchableOpacity>
+
+        {/* Center on target */}
+        <TouchableOpacity
+          style={[styles.sideIconBtn, SHADOW.md, { borderColor: COLORS.danger }]}
+          onPress={centerOnDevice}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.sideIconText}>🚨</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Sheet toggle */}
       <TouchableOpacity
         style={[styles.sheetToggle, SHADOW.md]}
         onPress={() => setSheetOpen(!sheetOpen)}
+        activeOpacity={0.8}
       >
         <Text style={styles.sheetToggleText}>{sheetOpen ? '▼' : '▲'}</Text>
       </TouchableOpacity>
@@ -169,29 +377,45 @@ export default function MapScreen() {
         <LinearGradient colors={['#161B22', '#0D1117']} style={StyleSheet.absoluteFill} />
         <View style={styles.sheetHandle} />
         <View style={styles.sheetContent}>
+          {/* Coordinates row */}
           <View style={styles.coordRow}>
             <View style={styles.coordItem}>
-              <Text style={styles.coordLabel}>VĨ ĐỘ (LAT)</Text>
-              <Text style={styles.coordValue}>{formatCoord(deviceData?.latitude)}°N</Text>
+              <Text style={styles.coordLabel}>VĨ ĐỘ NGƯỜI NGÃ</Text>
+              <Text style={styles.coordValue}>{formatCoord(deviceData?.latitude ?? lat)}°N</Text>
             </View>
             <View style={styles.coordDivider} />
             <View style={styles.coordItem}>
-              <Text style={styles.coordLabel}>KINH ĐỘ (LNG)</Text>
-              <Text style={styles.coordValue}>{formatCoord(deviceData?.longitude)}°E</Text>
+              <Text style={styles.coordLabel}>KINH ĐỘ NGƯỜI NGÃ</Text>
+              <Text style={styles.coordValue}>{formatCoord(deviceData?.longitude ?? lng)}°E</Text>
             </View>
           </View>
+
+          {/* Action row with Navigation Trigger */}
           <View style={styles.sheetFooter}>
             <View style={styles.sheetChip}>
-              <View style={[styles.chipDot, { backgroundColor: COLORS.success }]} />
-              <Text style={styles.chipText}>
-                Cập nhật lúc {formatTime(deviceData?.last_updated ?? deviceData?.fall_time)}
+              <View style={[styles.chipDot, { backgroundColor: isFall ? COLORS.danger : COLORS.success }]} />
+              <Text style={styles.chipText} numberOfLines={1}>
+                {isFall
+                  ? `Sự cố: ${formatTime(deviceData?.fall_time)}`
+                  : `Cập nhật: ${formatTime(deviceData?.last_updated)}`}
               </Text>
             </View>
-            <View style={[styles.deviceChipSmall, { borderColor: isFall ? `${COLORS.danger}60` : `${COLORS.primary}60` }]}>
-              <Text style={[styles.deviceChipText, { color: isFall ? COLORS.danger : COLORS.primary }]}>
-                {isFall ? 'TÉ NGÃ' : 'BÌNH THƯỜNG'}
-              </Text>
-            </View>
+
+            {/* Quick direct navigation button */}
+            <TouchableOpacity
+              style={[styles.navButton, SHADOW.sm]}
+              onPress={handleOpenTurnByTurn}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={isFall ? ['#FF453A', '#CC1F16'] : [COLORS.primary, COLORS.primaryDark]}
+                style={styles.navButtonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Text style={styles.navButtonText}>🗺️ Chỉ đường ngoài</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         </View>
       </Animated.View>
@@ -200,86 +424,229 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0D1117' },
-  topOverlay: { position: 'absolute', top: 0, left: 0, right: 0, height: 140 },
+  root: { flex: 1, backgroundColor: '#F6F8FA' },
+  topOverlay: { position: 'absolute', top: 0, left: 0, right: 0, height: 140, zIndex: 2 },
   topBar: {
-    position: 'absolute', top: 48, left: SPACING.xl, right: SPACING.xl,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    position: 'absolute',
+    top: 50,
+    left: SPACING.xl,
+    right: SPACING.xl,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 3,
   },
-  topTitle: { fontSize: FONT.xl, fontWeight: '800', color: '#fff' },
-  topSub: { fontSize: FONT.xs, color: COLORS.textSecondary, marginTop: 2 },
+  titleWrap: { flex: 1, marginRight: SPACING.sm },
+  topTitle: { fontSize: FONT.xl, fontWeight: '800', color: COLORS.textPrimary, letterSpacing: -0.3 },
+  topSub: { fontSize: FONT.xs, color: COLORS.textSecondary, marginTop: 2, fontWeight: '500' },
   typeToggle: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(13,17,23,0.8)',
+    backgroundColor: 'rgba(255,255,255,0.95)',
     borderRadius: RADIUS.full,
-    borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    overflow: 'hidden',
   },
-  typeBtn: { paddingHorizontal: SPACING.md, paddingVertical: 7 },
+  typeBtn: { paddingHorizontal: 10, paddingVertical: 6 },
   typeBtnActive: { backgroundColor: COLORS.primary },
-  typeBtnText: { fontSize: FONT.sm, color: COLORS.textSecondary, fontWeight: '600' },
+  typeBtnText: { fontSize: FONT.xs, color: COLORS.textSecondary, fontWeight: '600' },
   typeBtnTextActive: { color: '#fff' },
-  centerBtn: {
-    position: 'absolute', right: SPACING.xl,
-    bottom: BOTTOM_SHEET_HEIGHT + 80,
-    borderRadius: RADIUS.full, overflow: 'hidden', width: 52, height: 52,
+
+  // Floating Route Info Card
+  routeFloatingCard: {
+    position: 'absolute',
+    top: 105,
+    left: SPACING.lg,
+    right: SPACING.lg,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(10,132,255,0.25)',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    padding: SPACING.md,
+    zIndex: 6,
   },
-  centerBtnGradient: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  centerBtnIcon: { fontSize: 24, color: '#fff' },
+  routeLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+  },
+  routeLoadingText: {
+    fontSize: FONT.xs,
+    color: COLORS.textSecondary,
+    fontWeight: '600',
+  },
+  routeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
+  routeHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    flex: 1,
+  },
+  routeIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(10,132,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  routeStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  routeDistanceText: {
+    fontSize: FONT.md,
+    fontWeight: '900',
+    color: COLORS.textPrimary,
+    letterSpacing: -0.3,
+  },
+  routeDot: {
+    color: COLORS.textTertiary,
+    fontSize: FONT.sm,
+  },
+  routeDurationText: {
+    fontSize: FONT.md,
+    fontWeight: '900',
+    color: COLORS.success,
+    letterSpacing: -0.3,
+  },
+  routeSubtitle: {
+    fontSize: FONT.xs,
+    color: COLORS.textSecondary,
+    marginTop: 1,
+  },
+  fitViewBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+  },
+  fitViewText: {
+    color: COLORS.textPrimary,
+    fontSize: FONT.xs,
+    fontWeight: '700',
+  },
+  voiceNavBtn: {
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    marginTop: 4,
+  },
+  voiceNavGradient: {
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceNavText: {
+    fontSize: FONT.xs,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+
+  // Side buttons
+  sideButtonsWrap: {
+    position: 'absolute',
+    right: SPACING.xl,
+    bottom: BOTTOM_SHEET_HEIGHT + 24,
+    gap: 10,
+    zIndex: 5,
+  },
+  sideIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sideIconText: { fontSize: 18, color: COLORS.textPrimary },
+
   sheetToggle: {
-    position: 'absolute', right: SPACING.xl,
-    bottom: BOTTOM_SHEET_HEIGHT + 20,
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(22,27,34,0.9)',
-    borderWidth: 1, borderColor: COLORS.border,
-    alignItems: 'center', justifyContent: 'center',
+    position: 'absolute',
+    left: SPACING.xl,
+    bottom: BOTTOM_SHEET_HEIGHT + 24,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
   },
   sheetToggleText: { color: COLORS.textSecondary, fontSize: FONT.sm },
-  markerOuter: {
-    width: 50, height: 50, borderRadius: 25, borderWidth: 3,
-    backgroundColor: 'rgba(13,17,23,0.85)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  markerInner: {
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  markerIcon: { fontSize: 20 },
-  markerTail: {
-    width: 0, height: 0,
-    borderLeftWidth: 7, borderRightWidth: 7, borderTopWidth: 10,
-    borderLeftColor: 'transparent', borderRightColor: 'transparent',
-    alignSelf: 'center', marginTop: -1,
-  },
   bottomSheet: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     height: BOTTOM_SHEET_HEIGHT,
-    borderTopLeftRadius: RADIUS.xxl, borderTopRightRadius: RADIUS.xxl,
-    borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden',
+    borderTopLeftRadius: RADIUS.xxl,
+    borderTopRightRadius: RADIUS.xxl,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    zIndex: 4,
   },
   sheetHandle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignSelf: 'center', marginTop: SPACING.md,
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    alignSelf: 'center',
+    marginTop: SPACING.md,
   },
-  sheetContent: { flex: 1, padding: SPACING.xl },
-  coordRow: { flexDirection: 'row', flex: 1, alignItems: 'center' },
+  sheetContent: { flex: 1, padding: SPACING.lg, paddingTop: SPACING.md },
+  coordRow: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md },
   coordItem: { flex: 1, alignItems: 'center' },
   coordLabel: {
-    fontSize: FONT.xs, color: COLORS.textTertiary, fontWeight: '700',
-    letterSpacing: 1, marginBottom: 6,
+    fontSize: FONT.xs,
+    color: COLORS.textTertiary,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
-  coordValue: { fontSize: FONT.xl, fontWeight: '700', color: COLORS.textPrimary, letterSpacing: -0.5 },
-  coordDivider: { width: 1, height: 50, backgroundColor: COLORS.border, marginHorizontal: SPACING.md },
+  coordValue: { fontSize: FONT.md, fontWeight: '700', color: COLORS.textPrimary, letterSpacing: -0.5 },
+  coordDivider: { width: 1, height: 40, backgroundColor: COLORS.border, marginHorizontal: SPACING.sm },
   sheetFooter: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginTop: SPACING.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 2,
+    gap: SPACING.sm,
   },
-  sheetChip: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  sheetChip: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
   chipDot: { width: 8, height: 8, borderRadius: 4 },
   chipText: { fontSize: FONT.xs, color: COLORS.textSecondary },
-  deviceChipSmall: {
-    borderWidth: 1, borderRadius: RADIUS.full,
-    paddingHorizontal: SPACING.sm, paddingVertical: 4,
+  navButton: {
+    borderRadius: RADIUS.full,
+    overflow: 'hidden',
   },
-  deviceChipText: { fontSize: FONT.xs, fontWeight: '700', letterSpacing: 0.5 },
+  navButtonGradient: {
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navButtonText: {
+    fontSize: FONT.xs,
+    color: '#fff',
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
 });

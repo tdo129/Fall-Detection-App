@@ -133,10 +133,10 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-      <LinearGradient colors={['#0D1117', '#161B22']} style={StyleSheet.absoluteFill} />
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+      <LinearGradient colors={['#F6F8FA', '#EEF2F6']} style={StyleSheet.absoluteFill} />
       <LinearGradient
-        colors={['rgba(13,17,23,1)', 'rgba(13,17,23,0)']}
+        colors={['rgba(246,248,250,1)', 'rgba(246,248,250,0)']}
         style={styles.headerGradient}
         pointerEvents="none"
       />

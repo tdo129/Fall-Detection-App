@@ -37,7 +37,7 @@ export default function MetricCard({
     >
       {/* Subtle gradient background */}
       <LinearGradient
-        colors={['rgba(255,255,255,0.07)', 'rgba(255,255,255,0.03)']}
+        colors={['#FFFFFF', '#F9FAFB']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
