@@ -1,17 +1,17 @@
 // App.tsx
 import React from 'react';
-import { SafeAreaView, StatusBar, StyleSheet } from 'react-native';
-import DashboardScreen from './src/screens/DashboardScreen';
+import { StatusBar } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { DeviceProvider } from './src/context/DeviceContext';
+import AppNavigator from './src/navigation/AppNavigator';
 
 export default function App() {
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <DashboardScreen />
-    </SafeAreaView>
+    <SafeAreaProvider>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <DeviceProvider>
+        <AppNavigator />
+      </DeviceProvider>
+    </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#2b5797' },
-});
