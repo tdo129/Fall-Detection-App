@@ -6,6 +6,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { sendFallNotification, sendBatteryWarning } from './notificationService';
 import { saveFallEvent } from './historyService';
+import { syncAllowedDevicesToNative } from './nativeBridgeService';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 export const BACKGROUND_FALL_CHECK_TASK = 'BACKGROUND_FALL_CHECK';
@@ -195,6 +196,7 @@ export async function syncSettingsForBackground(settings: {
   deviceId: string;
   batteryThreshold: number;
   pairedDevices?: Array<{ id: string; name: string }>;
+  userEmail?: string;
 }): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY_DEVICE_ID, settings.deviceId);
   await AsyncStorage.setItem(
@@ -205,6 +207,10 @@ export async function syncSettingsForBackground(settings: {
     await AsyncStorage.setItem(
       STORAGE_KEY_PAIRED_DEVICES,
       JSON.stringify(settings.pairedDevices)
+    );
+    syncAllowedDevicesToNative(
+      settings.pairedDevices.map((d) => d.id),
+      settings.userEmail
     );
   }
 }

@@ -28,6 +28,7 @@ import {
   acknowledgeFallEvent,
 } from '../services/historyService';
 import { startFallAlarm, stopFallAlarm } from '../services/alarmService';
+import { syncAllowedDevicesToNative } from '../services/nativeBridgeService';
 import { useAuth } from './AuthContext';
 
 export const STORAGE_KEY_PAIRED_DEVICES = '@healthguard_paired_devices';
@@ -186,6 +187,12 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     };
   }, [userEmail, userDevicesKey, userActiveDeviceKey]);
 
+  // ── Đồng bộ danh sách thiết bị ghép nối xuống Native Service chạy ngầm ─────
+  useEffect(() => {
+    const ids = pairedDevices.map((d) => d.id);
+    syncAllowedDevicesToNative(ids, userEmail);
+  }, [pairedDevices, userEmail]);
+
   // ── Quản lý background monitoring ────────────────────────────────────────
   useEffect(() => {
     if (settings.backgroundMonitoring && settings.notificationsEnabled) {
@@ -193,6 +200,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         deviceId: activeDeviceId,
         batteryThreshold: settings.batteryThreshold,
         pairedDevices: pairedDevices.map((d) => ({ id: d.id, name: d.name })),
+        userEmail,
       });
       registerBackgroundFetch();
     } else {
@@ -204,6 +212,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     activeDeviceId,
     settings.batteryThreshold,
     pairedDevices,
+    userEmail,
   ]);
 
   // ── Realtime listeners cho TẤT CẢ các thiết bị đã ghép nối ───────────────
@@ -373,6 +382,9 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
           last_updated: new Date().toISOString(),
         });
       }
+
+      // Kích hoạt ngay lập tức sang Foreground Service Native
+      syncAllowedDevicesToNative(updated.map((d) => d.id), userEmail);
     } catch (err) {
       console.warn('[DeviceContext] Error saving new device:', err);
     }
@@ -401,6 +413,9 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         const userRef = doc(db, 'users', userEmail);
         await setDoc(userRef, { pairedDevices: updated }, { merge: true });
       }
+
+      // Cập nhật ngay danh sách còn lại sang Native Service
+      syncAllowedDevicesToNative(updated.map((d) => d.id), userEmail);
     } catch (err) {
       console.warn('[DeviceContext] Error removing device:', err);
     }
