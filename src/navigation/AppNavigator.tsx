@@ -10,6 +10,7 @@ import DashboardScreen from '../screens/DashboardScreen';
 import MapScreen from '../screens/Mapscreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import FallAlertModal from '../components/FallAlertModal';
 import { useDevice } from '../context/DeviceContext';
 import { COLORS, FONT, RADIUS, SPACING } from '../constants/theme';
 
@@ -136,6 +137,7 @@ export default function AppNavigator() {
         <Tab.Screen name="Lịch sử" component={HistoryScreen} />
         <Tab.Screen name="Cài đặt" component={SettingsScreen} />
       </Tab.Navigator>
+      <FallAlertModal />
     </NavigationContainer>
   );
 }

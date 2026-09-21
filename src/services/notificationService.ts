@@ -6,6 +6,7 @@ import { Platform } from 'react-native';
 // ─── Notification handler (foreground behavior) ────────────────────────────
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
+    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
     shouldShowBanner: true,
@@ -29,6 +30,8 @@ async function setupNotificationChannels(): Promise<void> {
       enableLights: true,
       lightColor: '#FF453A',
       enableVibrate: true,
+      sound: 'default',
+      bypassDnd: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
 
@@ -83,41 +86,50 @@ export async function sendFallNotification(data?: {
   deviceId?: string;
   deviceName?: string;
 }): Promise<void> {
-  const timeStr = data?.fallTime
-    ? new Date(data.fallTime).toLocaleTimeString('vi-VN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      })
-    : 'Vừa xảy ra';
+  try {
+    if (Platform.OS === 'android') {
+      await setupNotificationChannels();
+    }
 
-  const deviceLabel = data?.deviceName
-    ? `${data.deviceName} (${data.deviceId || 'ESP32'})`
-    : data?.deviceId || 'Thiết bị CareDrop';
+    const timeStr = data?.fallTime
+      ? new Date(data.fallTime).toLocaleTimeString('vi-VN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      : 'Vừa xảy ra';
 
-  const locationStr =
-    data?.latitude && data?.longitude
-      ? `📍 Vị trí: ${data.latitude.toFixed(6)}°N, ${data.longitude.toFixed(6)}°E`
-      : '';
+    const deviceLabel = data?.deviceName
+      ? `${data.deviceName} (${data.deviceId || 'ESP32'})`
+      : data?.deviceId || 'Thiết bị CareDrop';
 
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: `🚨 PHÁT HIỆN TÉ NGÃ - ${deviceLabel}!`,
-      body: `Phát hiện sự kiện té ngã từ [${deviceLabel}] lúc ${timeStr}.\n${locationStr}\nNhấn để mở ứng dụng hỗ trợ ngay.`,
-      data: {
-        type: 'fall_detected',
-        fallTime: data?.fallTime,
-        latitude: data?.latitude,
-        longitude: data?.longitude,
-        deviceId: data?.deviceId,
-        deviceName: data?.deviceName,
+    const locationStr =
+      data?.latitude && data?.longitude
+        ? `📍 Vị trí: ${data.latitude.toFixed(6)}°N, ${data.longitude.toFixed(6)}°E`
+        : '';
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `🚨 PHÁT HIỆN TÉ NGÃ - ${deviceLabel}!`,
+        body: `Phát hiện sự kiện té ngã từ [${deviceLabel}] lúc ${timeStr}.\n${locationStr}\nNhấn để mở ứng dụng hỗ trợ ngay.`,
+        data: {
+          type: 'fall_detected',
+          fallTime: data?.fallTime,
+          latitude: data?.latitude,
+          longitude: data?.longitude,
+          deviceId: data?.deviceId,
+          deviceName: data?.deviceName,
+        },
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority.MAX,
+        ...(Platform.OS === 'android' && { channelId: FALL_CHANNEL_ID }),
       },
-      sound: true,
-      priority: Notifications.AndroidNotificationPriority.MAX,
-      ...(Platform.OS === 'android' && { channelId: FALL_CHANNEL_ID }),
-    },
-    trigger: null, // Gửi ngay lập tức
-  });
+      trigger: null, // Gửi ngay lập tức
+    });
+    console.log('[NotificationService] Fall notification scheduled successfully for', deviceLabel);
+  } catch (err) {
+    console.error('[NotificationService] Error scheduling fall notification:', err);
+  }
 }
 
 // ─── Send battery warning notification ──────────────────────────────────────

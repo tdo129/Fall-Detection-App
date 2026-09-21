@@ -139,15 +139,24 @@ export default function SettingsScreen() {
   const handleToggleFallSimulation = async (id: string, currentFall: boolean) => {
     setTestingDeviceId(id);
     try {
-      await simulateDeviceFall(id, !currentFall);
-      Alert.alert(
-        !currentFall ? '🚨 Đã phát tín hiệu té ngã!' : '✅ Đã đặt lại bình thường',
-        !currentFall
-          ? `Đã gửi tín hiệu té ngã (fall_detected: true) lên Firestore cho [${id}]. Ứng dụng sẽ kích hoạt chuông và gửi thông báo!`
-          : `Đã đưa trạng thái thiết bị [${id}] về bình thường.`
-      );
+      const res = await simulateDeviceFall(id, !currentFall);
+      if (!currentFall) {
+        if (res.cloudSynced) {
+          Alert.alert(
+            '🚨 ĐÃ PHÁT TÍN HIỆU TÉ NGÃ!',
+            `Đã kích hoạt cảnh báo té ngã cho [${id}]!\n\n✅ Đã đồng bộ lên Firebase Cloud.\n🔔 Chuông báo động và thông báo đã được gửi thành công.`
+          );
+        } else {
+          Alert.alert(
+            '🚨 ĐÃ KÍCH HOẠT CẢNH BÁO TÉ NGÃ!',
+            `Đã kích hoạt chuông và thông báo thành công!\n\n⚠️ Lưu ý Firestore: ${res.error || 'Quyền ghi Firebase bị từ chối'}.\nĐể đồng bộ qua lại với phần cứng ESP32 thật, hãy mở Firebase Console -> Cloud Firestore -> Rules và đặt:\nallow read, write: if true;`
+          );
+        }
+      } else {
+        Alert.alert('✅ Đã đặt lại bình thường', `Đã đưa trạng thái thiết bị [${id}] về bình thường.`);
+      }
     } catch (e: any) {
-      Alert.alert('Lỗi Firebase', e?.message || 'Không thể cập nhật Firebase.');
+      Alert.alert('Thông báo', e?.message || 'Không thể xử lý yêu cầu.');
     } finally {
       setTestingDeviceId(null);
     }

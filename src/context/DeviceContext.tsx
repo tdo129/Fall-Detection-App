@@ -60,7 +60,10 @@ interface DeviceContextType {
   ) => Promise<{ success: boolean; message?: string }>;
   removePairedDevice: (id: string) => Promise<void>;
   setActiveDeviceId: (id: string) => void;
-  simulateDeviceFall: (id: string, fall: boolean) => Promise<void>;
+  simulateDeviceFall: (
+    id: string,
+    fall: boolean
+  ) => Promise<{ cloudSynced: boolean; error?: string }>;
   acknowledgefall: (targetDeviceId?: string) => Promise<void>;
   triggerEmergency: () => Promise<void>;
   cancelEmergency: () => Promise<void>;
@@ -101,6 +104,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState<boolean>(false);
 
   const prevFallMapRef = useRef<Record<string, boolean>>({});
+  const prevFallTimeMapRef = useRef<Record<string, string>>({});
   const prevBatteryWarnMapRef = useRef<Record<string, boolean>>({});
 
   // ── Khởi tạo notifications ────────────────────────────────────────────────
@@ -226,10 +230,22 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
 
             // ── Kiểm tra té ngã cho thiết bị này ──
             const wasFalling = prevFallMapRef.current[dev.id] ?? false;
+            const prevFallTime = prevFallTimeMapRef.current[dev.id];
             const isFalling = data.fall_detected === true;
+            const currentFallTime = data.fall_time;
 
-            if (isFalling && !wasFalling) {
+            // Xác định sự kiện té ngã mới:
+            // 1. Chuyển từ không té ngã sang có té ngã (isFalling && !wasFalling)
+            // 2. Hoặc vẫn đang té ngã nhưng có timestamp té ngã mới (currentFallTime !== prevFallTime)
+            const isNewFall =
+              isFalling &&
+              (!wasFalling || (Boolean(currentFallTime) && currentFallTime !== prevFallTime));
+
+            if (isNewFall) {
               console.log(`[DeviceContext] 🚨 NEW fall detected on [${dev.id}] (${dev.name})!`);
+              if (currentFallTime) {
+                prevFallTimeMapRef.current[dev.id] = currentFallTime;
+              }
               if (settings.notificationsEnabled) {
                 startFallAlarm();
                 sendFallNotification({
@@ -396,8 +412,98 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(userActiveDeviceKey, id).catch(() => {});
   };
 
-  // ── Giả lập té ngã trên Firebase Firestore (phục vụ test trực tiếp) ──────
-  const simulateDeviceFall = async (id: string, fall: boolean) => {
+  // ── Giả lập té ngã trên Firebase (phục vụ test trực tiếp & kích hoạt báo động) ──────
+  const simulateDeviceFall = async (
+    id: string,
+    fall: boolean
+  ): Promise<{ cloudSynced: boolean; error?: string }> => {
+    const dev = pairedDevices.find((d) => d.id === id);
+    const devName = dev?.name || id;
+    const nowIso = new Date().toISOString();
+
+    if (fall) {
+      prevFallMapRef.current[id] = true;
+      prevFallTimeMapRef.current[id] = nowIso;
+
+      setDevicesData((prev) => ({
+        ...prev,
+        [id]: {
+          ...(prev[id] || {
+            device_id: id,
+            battery_pct: 85,
+            latitude: 10.84,
+            longitude: 106.77,
+            connected: true,
+          }),
+          device_id: id,
+          fall_detected: true,
+          fall_time: nowIso,
+          last_updated: nowIso,
+        },
+      }));
+
+      // Bật chuông/rung cảnh báo ngay lập tức
+      startFallAlarm();
+
+      // Gửi thông báo đẩy hệ thống
+      if (settings.notificationsEnabled) {
+        sendFallNotification({
+          deviceId: id,
+          deviceName: devName,
+          fallTime: nowIso,
+          latitude: devicesData[id]?.latitude ?? 10.84,
+          longitude: devicesData[id]?.longitude ?? 106.77,
+        });
+      }
+
+      // Kích hoạt modal cảnh báo khẩn cấp toàn màn hình
+      setActiveFallAlert({
+        deviceId: id,
+        deviceName: devName,
+        fallTime: nowIso,
+        latitude: devicesData[id]?.latitude ?? 10.84,
+        longitude: devicesData[id]?.longitude ?? 106.77,
+        battery_pct: devicesData[id]?.battery_pct ?? 85,
+      });
+
+      // Lưu sự kiện vào lịch sử
+      try {
+        const saved = await saveFallEvent({
+          timestamp: nowIso,
+          latitude: devicesData[id]?.latitude ?? 10.84,
+          longitude: devicesData[id]?.longitude ?? 106.77,
+          battery_pct: devicesData[id]?.battery_pct ?? 85,
+          acknowledged: false,
+          deviceId: id,
+          deviceName: devName,
+        });
+        setFallEvents((prev) => [saved, ...prev]);
+      } catch (e) {
+        console.warn('[DeviceContext] Could not save fall event to history:', e);
+      }
+    } else {
+      // Đặt lại bình thường
+      prevFallMapRef.current[id] = false;
+      await stopFallAlarm();
+      setActiveFallAlert((current) => (current?.deviceId === id ? null : current));
+
+      setDevicesData((prev) => {
+        if (!prev[id]) return prev;
+        return {
+          ...prev,
+          [id]: {
+            ...prev[id],
+            fall_detected: false,
+            last_updated: nowIso,
+          },
+        };
+      });
+    }
+
+    // Đồng bộ lên Firebase Firestore nếu có quyền
+    let cloudSynced = false;
+    let cloudError: string | undefined;
+
     try {
       const docRef = doc(db, 'devices', id);
       await setDoc(
@@ -405,17 +511,21 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         {
           device_id: id,
           fall_detected: fall,
-          fall_time: new Date().toISOString(),
-          last_updated: new Date().toISOString(),
-          battery_pct: 85,
+          fall_time: nowIso,
+          last_updated: nowIso,
+          battery_pct: devicesData[id]?.battery_pct ?? 85,
           connected: true,
         },
         { merge: true }
       );
-    } catch (err) {
-      console.error('[DeviceContext] Error in simulateDeviceFall:', err);
-      throw err;
+      cloudSynced = true;
+    } catch (err: any) {
+      console.warn('[DeviceContext] Firestore setDoc notice (test proceeded locally):', err);
+      cloudSynced = false;
+      cloudError = err?.message || 'Lỗi quyền ghi Firebase (Rules)';
     }
+
+    return { cloudSynced, error: cloudError };
   };
 
   // ── Load fall history từ Firestore & AsyncStorage ────────────────────────
@@ -450,9 +560,26 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     const target = targetDeviceId || activeFallAlert?.deviceId || activeDeviceId;
     setActiveFallAlert(null);
 
+    // Reset trạng thái cục bộ ngay lập tức để không bị kẹt cờ té ngã
+    if (target) {
+      prevFallMapRef.current[target] = false;
+      setDevicesData((prev) => {
+        if (!prev[target]) return prev;
+        return {
+          ...prev,
+          [target]: {
+            ...prev[target],
+            fall_detected: false,
+          },
+        };
+      });
+    }
+
     try {
-      const docRef = doc(db, 'devices', target);
-      await updateDoc(docRef, { ack_fall: true, fall_detected: false });
+      if (target) {
+        const docRef = doc(db, 'devices', target);
+        await updateDoc(docRef, { ack_fall: true, fall_detected: false });
+      }
     } catch (err) {
       console.warn('[DeviceContext] Error updating ack_fall on Firestore:', err);
     }

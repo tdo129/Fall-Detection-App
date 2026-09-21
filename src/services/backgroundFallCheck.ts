@@ -10,6 +10,7 @@ import { saveFallEvent } from './historyService';
 // ─── Constants ──────────────────────────────────────────────────────────────
 export const BACKGROUND_FALL_CHECK_TASK = 'BACKGROUND_FALL_CHECK';
 const STORAGE_KEY_LAST_FALL_STATE_PREFIX = '@bg_last_fall_state_';
+const STORAGE_KEY_LAST_FALL_TIME_PREFIX = '@bg_last_fall_time_';
 const STORAGE_KEY_LAST_BATTERY_WARN = '@bg_last_battery_warn';
 const STORAGE_KEY_DEVICE_ID = '@bg_device_id';
 const STORAGE_KEY_BATTERY_THRESHOLD = '@bg_battery_threshold';
@@ -51,15 +52,28 @@ TaskManager.defineTask(BACKGROUND_FALL_CHECK_TASK, async () => {
 
         const data = docSnap.data();
         const fallKey = `${STORAGE_KEY_LAST_FALL_STATE_PREFIX}${dev.id}`;
+        const timeKey = `${STORAGE_KEY_LAST_FALL_TIME_PREFIX}${dev.id}`;
+
         const previousFallState = await AsyncStorage.getItem(fallKey);
+        const previousFallTime = await AsyncStorage.getItem(timeKey);
+
         const wasFalling = previousFallState === 'true';
         const isFalling = data.fall_detected === true;
+        const currentFallTime = data.fall_time;
 
         await AsyncStorage.setItem(fallKey, String(isFalling));
 
+        const isNewFall =
+          isFalling &&
+          (!wasFalling || (Boolean(currentFallTime) && currentFallTime !== previousFallTime));
+
         // Nếu phát hiện té ngã mới từ thiết bị này
-        if (isFalling && !wasFalling) {
+        if (isNewFall) {
           console.log(`[BackgroundFallCheck] NEW fall detected on [${dev.id}] (${dev.name})!`);
+          if (currentFallTime) {
+            await AsyncStorage.setItem(timeKey, currentFallTime);
+          }
+
           await saveFallEvent({
             timestamp: data.fall_time || new Date().toISOString(),
             latitude: data.latitude ?? 10.84,

@@ -18,7 +18,6 @@ import { useAuth } from '../context/AuthContext';
 import PulseAnimation from '../components/PulseAnimation';
 import BatteryIndicator from '../components/BatteryIndicator';
 import MetricCard from '../components/MetricCard';
-import FallAlertModal from '../components/FallAlertModal';
 import AddDeviceModal from '../components/AddDeviceModal';
 import { COLORS, FONT, RADIUS, SHADOW, SPACING } from '../constants/theme';
 
@@ -94,7 +93,6 @@ export default function DashboardScreen() {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-      <FallAlertModal />
 
       {/* Background gradient */}
       <LinearGradient
