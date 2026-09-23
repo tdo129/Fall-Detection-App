@@ -283,22 +283,22 @@ export default function GoogleLoginScreen() {
               <Text style={styles.googleGText}>G</Text>
             </View>
             <View style={styles.googleVerifiedBadge}>
-              <Text style={styles.googleVerifiedText}>🔒 Xác thực Google</Text>
+              <Text style={styles.googleVerifiedText}>🔒 Xác thực mỗi lần vào app</Text>
             </View>
           </View>
 
           <Text style={styles.cardTitle}>Đăng nhập với Google</Text>
           <Text style={styles.cardSubtitle}>
-            Sử dụng Tài khoản Google chính chủ của bạn để bảo vệ và nhận cảnh báo té ngã khẩn cấp 24/7.
+            Vui lòng đăng nhập tài khoản Gmail của bạn để vào ứng dụng và nhận cảnh báo té ngã.
           </Text>
 
           {/* Security Notice Box */}
           <View style={styles.securityBox}>
             <Text style={styles.securityBoxIcon}>🛡️</Text>
             <View style={styles.securityBoxContent}>
-              <Text style={styles.securityBoxTitle}>Bảo mật cấp tài khoản Google</Text>
+              <Text style={styles.securityBoxTitle}>Bảo mật phiên làm việc</Text>
               <Text style={styles.securityBoxText}>
-                Hệ thống chỉ cấp quyền nhận cảnh báo từ thiết bị phần cứng cho tài khoản Google đã được xác thực chính thức. Không thể dùng email giả định.
+                Mỗi khi mở ứng dụng, hệ thống đều yêu cầu xác thực tài khoản Gmail để đảm bảo an toàn tuyệt đối cho người giám sát và người thân.
               </Text>
             </View>
           </View>
@@ -396,7 +396,7 @@ export default function GoogleLoginScreen() {
           <WebView
             ref={webViewRef}
             source={{
-              uri: 'https://accounts.google.com/ServiceLogin?continue=https://myaccount.google.com/',
+              uri: 'https://accounts.google.com/AccountChooser?continue=https://myaccount.google.com/',
             }}
             userAgent={chromeUserAgent}
             javaScriptEnabled={true}

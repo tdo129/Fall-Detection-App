@@ -1,5 +1,12 @@
-// src/context/AuthContext.tsx
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+} from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import {
   UserProfile,
   getStoredGoogleUser,
@@ -23,6 +30,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const backgroundTimestampRef = useRef<number | null>(null);
+
+  // 1. Mỗi khi khởi động/vào app (cold start), bắt buộc đăng nhập Gmail (không tự động đăng nhập)
+  useEffect(() => {
+    logoutGoogleUser().finally(() => {
+      setUser(null);
+      setIsLoading(false);
+    });
+  }, []);
+
+  // 2. Theo dõi trạng thái ứng dụng: Nếu app chạy nền quá 3 phút, yêu cầu đăng nhập lại
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (
+        appStateRef.current === 'active' &&
+        (nextAppState === 'inactive' || nextAppState === 'background')
+      ) {
+        backgroundTimestampRef.current = Date.now();
+      }
+
+      if (
+        (appStateRef.current === 'inactive' || appStateRef.current === 'background') &&
+        nextAppState === 'active'
+      ) {
+        // Nếu chuyển từ nền quay lại app sau hơn 3 phút, hủy phiên đăng nhập
+        if (backgroundTimestampRef.current) {
+          const diffMinutes = (Date.now() - backgroundTimestampRef.current) / (1000 * 60);
+          if (diffMinutes >= 3) {
+            console.log('[AuthContext] Background timeout exceeded, forcing re-login');
+            logoutGoogleUser().finally(() => {
+              setUser(null);
+            });
+          }
+        }
+        backgroundTimestampRef.current = null;
+      }
+
+      appStateRef.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   const reloadUser = useCallback(async () => {
     try {
       const stored = await getStoredGoogleUser();
@@ -30,18 +83,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       setUser(null);
     }
-  }, []);
-
-  useEffect(() => {
-    getStoredGoogleUser()
-      .then((stored) => {
-        if (stored) {
-          setUser(stored);
-        }
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
   }, []);
 
   const login = useCallback(async (newUser: UserProfile) => {
