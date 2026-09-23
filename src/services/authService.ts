@@ -61,15 +61,21 @@ export async function getStoredGoogleUser(): Promise<UserProfile | null> {
 export async function saveGoogleUser(user: UserProfile): Promise<UserProfile> {
   try {
     const cleanEmail = user.email.toLowerCase().trim();
+    const isSelfAdmin = isAdminEmail(cleanEmail);
     const userRef = doc(db, 'users', cleanEmail);
     const snap = await getDoc(userRef);
+
+    // 1. KIỂM TRA QUYỀN TRUY CẬP: Chỉ những Gmail được Quản trị viên thêm vào mới được đăng nhập
+    if (!isSelfAdmin && !snap.exists()) {
+      throw new Error(`UNREGISTERED_GMAIL:${cleanEmail}`);
+    }
 
     let role: UserRole = 'supervisor';
     let status: AccountStatus = 'active';
     let espId = user.espId || '';
     let phoneNumber = user.phoneNumber || '';
 
-    if (isAdminEmail(cleanEmail)) {
+    if (isSelfAdmin) {
       role = 'admin';
     }
 
@@ -77,10 +83,10 @@ export async function saveGoogleUser(user: UserProfile): Promise<UserProfile> {
       const data = snap.data();
       // Nếu tài khoản đã bị quản trị viên khóa
       if (data.status === 'locked') {
-        throw new Error('Tài khoản của bạn đã bị Quản trị viên khóa. Vui lòng liên hệ quản trị viên để mở khóa.');
+        throw new Error('Tài khoản của bạn đã bị Quản trị viên khóa. Vui lòng liên hệ Quản trị viên để mở khóa.');
       }
 
-      if (isAdminEmail(cleanEmail)) {
+      if (isSelfAdmin) {
         role = 'admin';
       } else if (data.role && data.role !== 'admin') {
         role = data.role as UserRole;
@@ -95,6 +101,7 @@ export async function saveGoogleUser(user: UserProfile): Promise<UserProfile> {
     const updatedProfile: UserProfile = {
       ...user,
       email: cleanEmail,
+      displayName: user.displayName || (snap.exists() ? snap.data().displayName : '') || cleanEmail.split('@')[0],
       role,
       status,
       espId,
@@ -104,14 +111,14 @@ export async function saveGoogleUser(user: UserProfile): Promise<UserProfile> {
 
     await AsyncStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedProfile));
 
-    // Đồng bộ lên Firestore users/{email}
+    // Cập nhật thông tin đăng nhập lên Firestore (chỉ cập nhật lastLoginAt, photoURL nếu có)
     try {
       await setDoc(
         userRef,
         {
           uid: user.uid || cleanEmail,
           email: cleanEmail,
-          displayName: user.displayName || cleanEmail.split('@')[0],
+          displayName: updatedProfile.displayName,
           photoURL: user.photoURL || '',
           role,
           status,
@@ -164,7 +171,7 @@ export async function loginWithCredentials(
   const snap = await getDoc(userRef);
 
   if (!snap.exists()) {
-    throw new Error('Tài khoản không tồn tại trên hệ thống. Vui lòng liên hệ Quản trị viên.');
+    throw new Error(`UNREGISTERED_GMAIL:${cleanEmail}`);
   }
 
   const data = snap.data();

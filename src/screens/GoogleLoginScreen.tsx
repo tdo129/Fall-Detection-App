@@ -25,6 +25,8 @@ export default function GoogleLoginScreen() {
   const [isWebModalVisible, setWebModalVisible] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [detectedEmail, setDetectedEmail] = useState<string | null>(null);
+  const [webViewKey, setWebViewKey] = useState(1);
+  const lastRejectedEmailRef = useRef<string | null>(null);
 
   // State cho Đăng nhập bằng Mật khẩu (cho tài khoản do Admin cấp hoặc Quản trị viên)
   const [isCredModalVisible, setCredModalVisible] = useState(false);
@@ -51,6 +53,8 @@ export default function GoogleLoginScreen() {
             (url.indexOf('google.com') !== -1 && 
              url.indexOf('/signin') === -1 && 
              url.indexOf('/ServiceLogin') === -1 && 
+             url.indexOf('/AccountChooser') === -1 && 
+             url.indexOf('/chooser') === -1 && 
              url.indexOf('/v3/signin') === -1 && 
              url.indexOf('/identifier') === -1 && 
              url.indexOf('/challenge') === -1 &&
@@ -158,17 +162,20 @@ export default function GoogleLoginScreen() {
     displayName: string;
     photoURL?: string;
   }) => {
+    const cleanMail = profile.email.trim().toLowerCase();
     try {
       setIsAuthenticating(true);
-      setDetectedEmail(profile.email);
+      setDetectedEmail(cleanMail);
 
       // Perform login in AuthContext and sync with Firestore
       await login({
-        uid: profile.email,
-        email: profile.email,
-        displayName: profile.displayName || profile.email.split('@')[0],
+        uid: cleanMail,
+        email: cleanMail,
+        displayName: profile.displayName || cleanMail.split('@')[0],
         photoURL: profile.photoURL || '',
       });
+
+      lastRejectedEmailRef.current = null;
 
       // Close modal smoothly
       setTimeout(() => {
@@ -177,7 +184,60 @@ export default function GoogleLoginScreen() {
       }, 600);
     } catch (err: any) {
       setIsAuthenticating(false);
-      Alert.alert('Lỗi đăng nhập', err.message || 'Không thể đồng bộ tài khoản Google.');
+      setWebModalVisible(false);
+      setDetectedEmail(null);
+
+      const errMsg: string = err?.message || '';
+
+      if (errMsg.startsWith('UNREGISTERED_GMAIL:')) {
+        const unregEmail = errMsg.replace('UNREGISTERED_GMAIL:', '').trim();
+        lastRejectedEmailRef.current = unregEmail;
+
+        Alert.alert(
+          'Gmail chưa được đăng ký ⚠️',
+          `Tài khoản Gmail (${unregEmail}) chưa được Quản trị viên thêm vào hệ thống.\n\nVui lòng liên hệ Quản trị viên để được cấp phép hoặc đăng nhập lại bằng tài khoản Gmail khác.`,
+          [
+            {
+              text: 'Đăng nhập lại',
+              onPress: () => {
+                setWebViewKey((prev) => prev + 1);
+                setTimeout(() => {
+                  setWebModalVisible(true);
+                }, 300);
+              },
+            },
+            {
+              text: 'Đóng',
+              style: 'cancel',
+            },
+          ],
+          { cancelable: false }
+        );
+      } else if (errMsg.includes('khóa')) {
+        lastRejectedEmailRef.current = cleanMail;
+        Alert.alert(
+          'Tài khoản bị khóa 🔒',
+          errMsg,
+          [
+            {
+              text: 'Đăng nhập lại',
+              onPress: () => {
+                setWebViewKey((prev) => prev + 1);
+                setTimeout(() => {
+                  setWebModalVisible(true);
+                }, 300);
+              },
+            },
+            {
+              text: 'Đóng',
+              style: 'cancel',
+            },
+          ],
+          { cancelable: false }
+        );
+      } else {
+        Alert.alert('Lỗi đăng nhập', errMsg || 'Không thể đồng bộ tài khoản Google.');
+      }
     }
   };
 
@@ -185,6 +245,10 @@ export default function GoogleLoginScreen() {
     try {
       const data = JSON.parse(event.nativeEvent.data);
       if (data.type === 'GOOGLE_AUTH_SUCCESS' && data.email) {
+        // Tránh vòng lặp kích hoạt lại ngay email vừa bị từ chối
+        if (data.email.trim().toLowerCase() === lastRejectedEmailRef.current) {
+          return;
+        }
         handleGoogleAuthSuccess(data);
       }
     } catch (e) {
@@ -194,6 +258,7 @@ export default function GoogleLoginScreen() {
 
   // Trigger manual extraction when user clicks "Xác nhận vào app"
   const handleManualExtraction = () => {
+    lastRejectedEmailRef.current = null;
     webViewRef.current?.injectJavaScript(`
       (function() {
         var email = null;
@@ -249,7 +314,31 @@ export default function GoogleLoginScreen() {
       await loginWithPassword(cleanMail, cleanPass);
       setCredModalVisible(false);
     } catch (err: any) {
-      Alert.alert('Đăng nhập thất bại', err.message || 'Không thể đăng nhập tài khoản.');
+      const errMsg: string = err?.message || '';
+      if (errMsg.startsWith('UNREGISTERED_GMAIL:')) {
+        const unregEmail = errMsg.replace('UNREGISTERED_GMAIL:', '').trim();
+        Alert.alert(
+          'Gmail chưa được đăng ký ⚠️',
+          `Tài khoản Gmail (${unregEmail}) chưa được Quản trị viên thêm vào hệ thống.\n\nVui lòng liên hệ Quản trị viên để được cấp phép hoặc thử lại với tài khoản khác.`,
+          [
+            {
+              text: 'Đăng nhập lại',
+              onPress: () => {
+                setCredPassword('');
+              },
+            },
+            {
+              text: 'Đóng',
+              style: 'cancel',
+            },
+          ],
+          { cancelable: false }
+        );
+      } else if (errMsg.includes('khóa')) {
+        Alert.alert('Tài khoản bị khóa 🔒', errMsg);
+      } else {
+        Alert.alert('Đăng nhập thất bại', errMsg || 'Không thể đăng nhập tài khoản.');
+      }
     } finally {
       setIsCredLoading(false);
     }
@@ -296,9 +385,9 @@ export default function GoogleLoginScreen() {
           <View style={styles.securityBox}>
             <Text style={styles.securityBoxIcon}>🛡️</Text>
             <View style={styles.securityBoxContent}>
-              <Text style={styles.securityBoxTitle}>Bảo mật phiên làm việc</Text>
+              <Text style={styles.securityBoxTitle}>Chỉ tài khoản được cấp phép</Text>
               <Text style={styles.securityBoxText}>
-                Mỗi khi mở ứng dụng, hệ thống đều yêu cầu xác thực tài khoản Gmail để đảm bảo an toàn tuyệt đối cho người giám sát và người thân.
+                Hệ thống chỉ cho phép các tài khoản Gmail đã được Quản trị viên thêm vào hệ thống đăng nhập. Các tài khoản chưa đăng ký sẽ bị từ chối truy cập.
               </Text>
             </View>
           </View>
@@ -306,7 +395,11 @@ export default function GoogleLoginScreen() {
           {/* MAIN GOOGLE SIGN IN BUTTON */}
           <TouchableOpacity
             style={styles.googleMainBtn}
-            onPress={() => setWebModalVisible(true)}
+            onPress={() => {
+              lastRejectedEmailRef.current = null;
+              setWebViewKey((prev) => prev + 1);
+              setWebModalVisible(true);
+            }}
             activeOpacity={0.85}
           >
             <View style={styles.googleBtnIconBox}>
@@ -394,6 +487,7 @@ export default function GoogleLoginScreen() {
 
           {/* Official Google Login WebView */}
           <WebView
+            key={webViewKey}
             ref={webViewRef}
             source={{
               uri: 'https://accounts.google.com/AccountChooser?continue=https://myaccount.google.com/',
