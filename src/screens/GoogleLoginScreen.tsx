@@ -1,4 +1,3 @@
-// src/screens/GoogleLoginScreen.tsx
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -12,6 +11,7 @@ import {
   ScrollView,
   StatusBar,
   Linking,
+  TextInput,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,12 +19,18 @@ import { useAuth } from '../context/AuthContext';
 import { COLORS, FONT, RADIUS, SHADOW, SPACING } from '../constants/theme';
 
 export default function GoogleLoginScreen() {
-  const { login } = useAuth();
+  const { login, loginWithPassword } = useAuth();
   const webViewRef = useRef<WebView>(null);
 
   const [isWebModalVisible, setWebModalVisible] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [detectedEmail, setDetectedEmail] = useState<string | null>(null);
+
+  // State cho Đăng nhập bằng Mật khẩu (cho tài khoản do Admin cấp hoặc Quản trị viên)
+  const [isCredModalVisible, setCredModalVisible] = useState(false);
+  const [credEmail, setCredEmail] = useState('');
+  const [credPassword, setCredPassword] = useState('');
+  const [isCredLoading, setIsCredLoading] = useState(false);
 
   // Modern Mobile Chrome user agent to prevent 403 disallowed_useragent from Google
   const chromeUserAgent =
@@ -230,6 +236,25 @@ export default function GoogleLoginScreen() {
     `);
   };
 
+  // Đăng nhập bằng Email & Mật khẩu
+  const handleCredentialLogin = async () => {
+    const cleanMail = credEmail.trim().toLowerCase();
+    const cleanPass = credPassword.trim();
+    if (!cleanMail || !cleanPass) {
+      Alert.alert('Chưa nhập đủ thông tin', 'Vui lòng nhập Email và Mật khẩu.');
+      return;
+    }
+    setIsCredLoading(true);
+    try {
+      await loginWithPassword(cleanMail, cleanPass);
+      setCredModalVisible(false);
+    } catch (err: any) {
+      Alert.alert('Đăng nhập thất bại', err.message || 'Không thể đăng nhập tài khoản.');
+    } finally {
+      setIsCredLoading(false);
+    }
+  };
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -288,6 +313,15 @@ export default function GoogleLoginScreen() {
               <Text style={styles.googleBtnG}>G</Text>
             </View>
             <Text style={styles.googleMainBtnText}>Tiếp tục với Google</Text>
+          </TouchableOpacity>
+
+          {/* CREDENTIAL LOGIN BUTTON */}
+          <TouchableOpacity
+            style={styles.credLoginBtn}
+            onPress={() => setCredModalVisible(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.credLoginBtnText}>🔑 Đăng nhập bằng Mật khẩu được cấp</Text>
           </TouchableOpacity>
 
           <Text style={styles.guaranteeText}>
@@ -393,6 +427,83 @@ export default function GoogleLoginScreen() {
             <Text style={styles.webBottomBarText}>
               💡 Sau khi bạn đăng nhập tài khoản Google của mình, CareDrop sẽ tự động nhận diện và đưa bạn vào ứng dụng.
             </Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── CỬA SỔ ĐĂNG NHẬP BẰNG MẬT KHẨU (DO ADMIN CẤP) ── */}
+      <Modal
+        visible={isCredModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCredModalVisible(false)}
+      >
+        <View style={styles.credModalOverlay}>
+          <View style={styles.credModalCard}>
+            <View style={styles.credModalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.credModalTitle}>Đăng nhập Mật khẩu</Text>
+                <Text style={styles.credModalSubtitle}>
+                  Tài khoản do Quản trị viên cấp hoặc Quản trị viên
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.credCloseBtn}
+                onPress={() => setCredModalVisible(false)}
+              >
+                <Text style={styles.credCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Quick Admin fill chip */}
+            <TouchableOpacity
+              style={styles.adminChip}
+              onPress={() => {
+                setCredEmail('ntuankiet0201@gmail.com');
+                setCredPassword('admin123');
+              }}
+            >
+              <Text style={styles.adminChipText}>⚡ Quản trị viên (ntuankiet0201@gmail.com)</Text>
+            </TouchableOpacity>
+
+            <View style={styles.credInputGroup}>
+              <Text style={styles.credInputLabel}>EMAIL ĐĂNG NHẬP</Text>
+              <TextInput
+                style={styles.credInput}
+                placeholder="VD: user@caredrop.com"
+                placeholderTextColor="#64748B"
+                value={credEmail}
+                onChangeText={setCredEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.credInputGroup}>
+              <Text style={styles.credInputLabel}>MẬT KHẨU</Text>
+              <TextInput
+                style={styles.credInput}
+                placeholder="Nhập mật khẩu"
+                placeholderTextColor="#64748B"
+                value={credPassword}
+                onChangeText={setCredPassword}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.credSubmitBtn, isCredLoading && { opacity: 0.7 }]}
+              onPress={handleCredentialLogin}
+              disabled={isCredLoading}
+              activeOpacity={0.85}
+            >
+              {isCredLoading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.credSubmitText}>Đăng nhập ngay ›</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -678,5 +789,115 @@ const styles = StyleSheet.create({
     color: '#5F6368',
     textAlign: 'center',
     lineHeight: 16,
+  },
+
+  // Credential Login Button & Modal
+  credLoginBtn: {
+    marginTop: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+  },
+  credLoginBtnText: {
+    color: '#CBD5E1',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  credModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  credModalCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#1E293B',
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  credModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  credModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  credModalSubtitle: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  credCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  credCloseText: {
+    color: '#CBD5E1',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  adminChip: {
+    backgroundColor: 'rgba(0, 122, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 122, 255, 0.3)',
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+  },
+  adminChipText: {
+    color: '#38BDF8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  credInputGroup: {
+    marginBottom: 14,
+  },
+  credInputLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#94A3B8',
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  credInput: {
+    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 12,
+    height: 48,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+  credSubmitBtn: {
+    backgroundColor: '#007AFF',
+    borderRadius: 14,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  credSubmitText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

@@ -7,6 +7,8 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { DeviceProvider } from './src/context/DeviceContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import GoogleLoginScreen from './src/screens/GoogleLoginScreen';
+import AdminScreen from './src/screens/AdminScreen';
+import { isAdminEmail } from './src/services/authService';
 
 function RootNavigation() {
   const { user, isLoading } = useAuth();
@@ -19,9 +21,14 @@ function RootNavigation() {
     );
   }
 
-  // Bắt buộc phải đăng nhập bằng tài khoản Google mới được vào app
+  // Bắt buộc phải đăng nhập mới được vào app
   if (!user) {
     return <GoogleLoginScreen />;
+  }
+
+  // Phân quyền: Chỉ Quản trị viên (Admin) được cấu hình trong hệ thống mới vào AdminScreen
+  if (isAdminEmail(user.email)) {
+    return <AdminScreen />;
   }
 
   return (

@@ -1,12 +1,20 @@
 // src/context/AuthContext.tsx
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { UserProfile, getStoredGoogleUser, saveGoogleUser, logoutGoogleUser } from '../services/authService';
+import {
+  UserProfile,
+  getStoredGoogleUser,
+  saveGoogleUser,
+  logoutGoogleUser,
+  loginWithCredentials,
+} from '../services/authService';
 
 interface AuthContextType {
   user: UserProfile | null;
   isLoading: boolean;
-  login: (user: UserProfile) => Promise<void>;
+  login: (user: UserProfile) => Promise<UserProfile>;
+  loginWithPassword: (email: string, pass: string) => Promise<UserProfile>;
   logout: () => Promise<void>;
+  reloadUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -14,6 +22,15 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const reloadUser = useCallback(async () => {
+    try {
+      const stored = await getStoredGoogleUser();
+      setUser(stored);
+    } catch {
+      setUser(null);
+    }
+  }, []);
 
   useEffect(() => {
     getStoredGoogleUser()
@@ -28,8 +45,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (newUser: UserProfile) => {
-    await saveGoogleUser(newUser);
-    setUser(newUser);
+    const updated = await saveGoogleUser(newUser);
+    setUser(updated);
+    return updated;
+  }, []);
+
+  const loginWithPassword = useCallback(async (email: string, pass: string) => {
+    const profile = await loginWithCredentials(email, pass);
+    setUser(profile);
+    return profile;
   }, []);
 
   const logout = useCallback(async () => {
@@ -43,7 +67,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         isLoading,
         login,
+        loginWithPassword,
         logout,
+        reloadUser,
       }}
     >
       {children}
