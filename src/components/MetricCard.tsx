@@ -35,9 +35,9 @@ export default function MetricCard({
       activeOpacity={0.75}
       style={[styles.card, SHADOW.md, style]}
     >
-      {/* Subtle gradient background */}
+      {/* White card background */}
       <LinearGradient
-        colors={['rgba(255,255,255,0.07)', 'rgba(255,255,255,0.03)']}
+        colors={['#FFFFFF', '#FFFFFF']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}

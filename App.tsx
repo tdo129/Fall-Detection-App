@@ -8,6 +8,7 @@ import { DeviceProvider } from './src/context/DeviceContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import GoogleLoginScreen from './src/screens/GoogleLoginScreen';
 import AdminScreen from './src/screens/AdminScreen';
+import MonitoredScreen from './src/screens/MonitoredScreen';
 import { isAdminEmail } from './src/services/authService';
 
 function RootNavigation() {
@@ -26,11 +27,17 @@ function RootNavigation() {
     return <GoogleLoginScreen />;
   }
 
-  // Phân quyền: Chỉ Quản trị viên (Admin) được cấu hình trong hệ thống mới vào AdminScreen
-  if (isAdminEmail(user.email)) {
+  // Phân quyền 1: Quản trị viên (Admin)
+  if (isAdminEmail(user.email) || user.role === 'admin') {
     return <AdminScreen />;
   }
 
+  // Phân quyền 2: Người được giám sát (Monitored Person)
+  if (user.role === 'monitored_person') {
+    return <MonitoredScreen />;
+  }
+
+  // Phân quyền 3: Người giám sát (Supervisor - mặc định cho các tài khoản giám sát)
   return (
     <DeviceProvider>
       <AppNavigator />
@@ -57,7 +64,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
       <AuthProvider>
         <RootNavigation />
       </AuthProvider>
@@ -68,7 +75,7 @@ export default function App() {
 const styles = StyleSheet.create({
   loadingRoot: {
     flex: 1,
-    backgroundColor: '#0D1117',
+    backgroundColor: '#F4F8FD',
     alignItems: 'center',
     justifyContent: 'center',
   },

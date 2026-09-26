@@ -6,6 +6,7 @@ export interface DeviceData {
   battery_pct: number;      // Phần trăm pin (%)
   fall_time: string;        // Thời gian xảy ra sự cố (ISO string)
   ack_fall: boolean;        // Cờ xác nhận app đã nhận thông báo
+  name?: string;            // Tên thiết bị
   emergency_mode?: boolean; // Chế độ khẩn cấp
   device_id?: string;       // ID thiết bị
   last_updated?: string;    // Lần cập nhật cuối

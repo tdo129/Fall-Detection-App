@@ -1,5 +1,6 @@
 package com.doanapp
-
+ 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 
@@ -11,22 +12,49 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
+  companion object {
+    var initialFallIntent: Intent? = null
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
-    // Set the theme to AppTheme BEFORE onCreate to support
-    // coloring the background, status bar, and navigation bar.
-    // This is required for expo-splash-screen.
-    setTheme(R.style.AppTheme);
+    setTheme(R.style.AppTheme)
     super.onCreate(null)
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      splashScreen.setOnExitAnimationListener { splashScreenView ->
+        splashScreenView.remove()
+      }
+    }
+    window.decorView.post {
+      try {
+        reportFullyDrawn()
+      } catch (e: Exception) {}
+    }
+
+
+
+    if (intent?.getStringExtra("notification_type") == "fall_detected") {
+      initialFallIntent = intent
+    }
 
     // Khởi động FallMonitoringService chạy ngầm bảo vệ 24/7 ngay khi mở app
     try {
-      val serviceIntent = android.content.Intent(this, FallMonitoringService::class.java).apply {
+      val serviceIntent = Intent(this, FallMonitoringService::class.java).apply {
         action = FallMonitoringService.ACTION_START
       }
       androidx.core.content.ContextCompat.startForegroundService(this, serviceIntent)
       android.util.Log.d("MainActivity", "FallMonitoringService started from MainActivity")
     } catch (e: Exception) {
       android.util.Log.e("MainActivity", "Failed to start FallMonitoringService: ${e.message}", e)
+    }
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    if (intent.getStringExtra("notification_type") == "fall_detected") {
+      initialFallIntent = intent
+      CareDropBridgeModule.emitPendingFallAlert(intent)
     }
   }
 

@@ -30,7 +30,6 @@ async function setupNotificationChannels(): Promise<void> {
       enableLights: true,
       lightColor: '#FF453A',
       enableVibrate: true,
-      sound: 'default',
       bypassDnd: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
@@ -115,10 +114,13 @@ export async function sendFallNotification(data?: {
         data: {
           type: 'fall_detected',
           fallTime: data?.fallTime,
+          fall_time: data?.fallTime,
           latitude: data?.latitude,
           longitude: data?.longitude,
           deviceId: data?.deviceId,
+          device_id: data?.deviceId,
           deviceName: data?.deviceName,
+          device_name: data?.deviceName,
         },
         sound: true,
         priority: Notifications.AndroidNotificationPriority.MAX,

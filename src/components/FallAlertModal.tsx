@@ -16,8 +16,65 @@ import { useDevice } from '../context/DeviceContext';
 const { width, height } = Dimensions.get('window');
 
 export default function FallAlertModal() {
-  const { deviceData, acknowledgefall, activeFallAlert, activeDevice } = useDevice();
-  const isFall = (deviceData?.fall_detected ?? false) || activeFallAlert !== null;
+  const {
+    deviceData,
+    devicesData,
+    acknowledgefall,
+    activeFallAlert,
+    activeDevice,
+    activeDeviceId,
+    pairedDevices,
+  } = useDevice();
+
+  // Xác định thiết bị bị té ngã:
+  // Ưu tiên activeFallAlert, nếu không tìm bất kỳ thiết bị nào trong devicesData hoặc deviceData đang active
+  const fallingDevId =
+    activeFallAlert?.deviceId ||
+    Object.keys(devicesData).find((id) => devicesData[id]?.fall_detected === true) ||
+    (deviceData?.fall_detected ? (deviceData.device_id || activeDeviceId) : '') ||
+    activeDeviceId ||
+    '';
+
+  const currentFallTime = activeFallAlert?.fallTime || (fallingDevId ? devicesData[fallingDevId]?.fall_time : '') || deviceData?.fall_time || '';
+  const lastAlertSignature = `${fallingDevId}_${currentFallTime}`;
+  const prevSignatureRef = useRef(lastAlertSignature);
+
+  // Local dismissal state để đảm bảo giao diện đóng NGAY LẬP TỨC khi người dùng bấm nút
+  const [isLocallyDismissed, setIsLocallyDismissed] = useState(false);
+
+  // Khi có sự cố té ngã mới (activeFallAlert được kích hoạt hoặc signature thay đổi), luôn mở lại modal
+  useEffect(() => {
+    if (activeFallAlert) {
+      setIsLocallyDismissed(false);
+    }
+  }, [activeFallAlert]);
+
+  useEffect(() => {
+    if (lastAlertSignature && lastAlertSignature !== prevSignatureRef.current) {
+      prevSignatureRef.current = lastAlertSignature;
+      setIsLocallyDismissed(false);
+    }
+  }, [lastAlertSignature]);
+
+  const rawIsFall =
+    Boolean(activeFallAlert) ||
+    Boolean(fallingDevId && devicesData[fallingDevId]?.fall_detected) ||
+    Boolean(deviceData?.fall_detected);
+
+  const isFall = rawIsFall && !isLocallyDismissed;
+
+  const fallingDevData = fallingDevId ? (devicesData[fallingDevId] || deviceData) : deviceData;
+  const pairedDev = pairedDevices.find((d) => d.id === fallingDevId);
+  const displayName =
+    activeFallAlert?.deviceName ||
+    pairedDev?.name ||
+    fallingDevData?.device_id ||
+    fallingDevId ||
+    activeDevice?.name ||
+    'Thiết bị giám sát';
+
+  const lat = activeFallAlert?.latitude ?? fallingDevData?.latitude;
+  const lng = activeFallAlert?.longitude ?? fallingDevData?.longitude;
 
   const flashAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.7)).current;
@@ -37,7 +94,7 @@ export default function FallAlertModal() {
       toValue: 1,
       tension: 100,
       friction: 8,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
 
     // Flashing background
@@ -52,11 +109,11 @@ export default function FallAlertModal() {
     // Shake animation
     const shakeLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(shakeAnim, { toValue: 6, duration: 80, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: -6, duration: 80, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: 4, duration: 80, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: -4, duration: 80, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: 0, duration: 80, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 6, duration: 80, useNativeDriver: false }),
+        Animated.timing(shakeAnim, { toValue: -6, duration: 80, useNativeDriver: false }),
+        Animated.timing(shakeAnim, { toValue: 4, duration: 80, useNativeDriver: false }),
+        Animated.timing(shakeAnim, { toValue: -4, duration: 80, useNativeDriver: false }),
+        Animated.timing(shakeAnim, { toValue: 0, duration: 80, useNativeDriver: false }),
         Animated.delay(1500),
       ])
     );
@@ -91,6 +148,10 @@ export default function FallAlertModal() {
       transparent
       animationType="fade"
       statusBarTranslucent
+      onRequestClose={() => {
+        setIsLocallyDismissed(true);
+        acknowledgefall(fallingDevId);
+      }}
     >
       <Animated.View style={[styles.overlay, { backgroundColor: bgColor }]}>
         {/* Content card */}
@@ -111,10 +172,11 @@ export default function FallAlertModal() {
             style={StyleSheet.absoluteFill}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
+            pointerEvents="none"
           />
 
           {/* Warning icon */}
-          <View style={styles.iconRing}>
+          <View style={styles.iconRing} pointerEvents="none">
             <View style={styles.iconInner}>
               <Text style={styles.alertIcon}>⚠️</Text>
             </View>
@@ -122,13 +184,11 @@ export default function FallAlertModal() {
 
           <Text style={styles.title}>PHÁT HIỆN TÉ NGÃ!</Text>
           <Text style={styles.subtitle}>
-            {activeFallAlert?.deviceName
-              ? `${activeFallAlert.deviceName} (${activeFallAlert.deviceId})`
-              : `Thiết bị ${activeDevice?.name || deviceData?.device_id || 'ESP32_FALL_001'}`}
+            {displayName} {fallingDevId && displayName !== fallingDevId ? `(${fallingDevId})` : ''}
           </Text>
 
           {/* Stats row */}
-          <View style={styles.statsRow}>
+          <View style={styles.statsRow} pointerEvents="none">
             <View style={styles.statItem}>
               <Text style={styles.statLabel}>THỜI GIAN</Text>
               <Text style={styles.statValue}>{formatElapsed(elapsedSeconds)}</Text>
@@ -137,8 +197,8 @@ export default function FallAlertModal() {
             <View style={styles.statItem}>
               <Text style={styles.statLabel}>TỌA ĐỘ</Text>
               <Text style={styles.statValue} numberOfLines={2}>
-                {deviceData?.latitude?.toFixed(5) ?? '--'}{'\n'}
-                {deviceData?.longitude?.toFixed(5) ?? '--'}
+                {typeof lat === 'number' ? lat.toFixed(5) : '--'}{'\n'}
+                {typeof lng === 'number' ? lng.toFixed(5) : '--'}
               </Text>
             </View>
           </View>
@@ -150,7 +210,11 @@ export default function FallAlertModal() {
           {/* Acknowledge button */}
           <TouchableOpacity
             style={styles.ackBtn}
-            onPress={() => acknowledgefall()}
+            onPress={() => {
+              console.log('[FallAlertModal] ✓ User pressed Acknowledge - Closing modal immediately');
+              setIsLocallyDismissed(true);
+              acknowledgefall(fallingDevId);
+            }}
             activeOpacity={0.8}
           >
             <LinearGradient
@@ -158,6 +222,7 @@ export default function FallAlertModal() {
               style={styles.ackBtnGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
+              pointerEvents="none"
             >
               <Text style={styles.ackBtnText}>✓  Đã kiểm tra — Tắt cảnh báo</Text>
             </LinearGradient>

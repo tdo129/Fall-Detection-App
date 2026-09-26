@@ -2,6 +2,8 @@
 // Đây là yêu cầu của expo-task-manager
 import './src/services/backgroundFallCheck';
 
+import { LogBox } from 'react-native';
+LogBox.ignoreLogs(['expo-notifications: Custom sound', 'Custom sound']);
 import { registerRootComponent } from 'expo';
 
 import App from './App';

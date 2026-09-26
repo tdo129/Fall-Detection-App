@@ -529,7 +529,7 @@ export default function MapScreen() {
           { transform: [{ translateY: sheetTranslate }] },
         ]}
       >
-        <LinearGradient colors={['#161B22', '#0D1117']} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['#FFFFFF', '#F8FAFC']} style={StyleSheet.absoluteFill} />
 
         {/* Thanh kéo handle */}
         <View style={styles.sheetHandle} />
@@ -556,7 +556,7 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#0D1117',
+    backgroundColor: '#F4F8FD',
   },
 
   /* ── NÚT PHÓNG TO GÓC TRÊN TRÁI ── */
@@ -567,7 +567,9 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 20,
@@ -576,7 +578,7 @@ const styles = StyleSheet.create({
   zoomBtnText: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#333333',
+    color: '#0F172A',
     lineHeight: 26,
   },
 
@@ -598,28 +600,30 @@ const styles = StyleSheet.create({
   topTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    color: '#0F172A',
+    textShadowColor: 'rgba(255, 255, 255, 0.8)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    textShadowRadius: 3,
   },
   topSub: {
     fontSize: 11,
-    color: '#D0D7DE',
+    color: '#64748B',
     marginTop: 1,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
   },
 
   /* ── BỘ CHỌN CHẾ ĐỘ BẢN ĐỒ [Tối | Đường | Vệ tinh] ── */
   mapToggleWrap: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(22, 27, 34, 0.9)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: RADIUS.full,
     padding: 3,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: '#E2E8F0',
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   mapToggleBtn: {
     paddingHorizontal: 12,
@@ -631,7 +635,7 @@ const styles = StyleSheet.create({
   },
   mapToggleText: {
     fontSize: 12,
-    color: '#8B949E',
+    color: '#64748B',
     fontWeight: '600',
   },
   mapToggleTextActive: {
@@ -641,11 +645,16 @@ const styles = StyleSheet.create({
 
   /* ── ROUTE CARD ── */
   routeCard: {
-    backgroundColor: '#131926',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderColor: '#E2E8F0',
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   routeHeader: {
     flexDirection: 'row',
@@ -656,12 +665,12 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#1C273C',
+    backgroundColor: 'rgba(0, 122, 255, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
     borderWidth: 1,
-    borderColor: 'rgba(0, 122, 255, 0.35)',
+    borderColor: 'rgba(0, 122, 255, 0.2)',
   },
   routeInfo: {
     flex: 1,
@@ -669,22 +678,22 @@ const styles = StyleSheet.create({
   routeDistanceText: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
   routeMinutesText: {
-    color: '#00E676',
+    color: '#16A34A',
     fontWeight: '800',
   },
   routeSubText: {
     fontSize: 11,
-    color: '#8B949E',
+    color: '#64748B',
     marginTop: 2,
   },
   gearMiniBtn: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -692,11 +701,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#F1F5F9',
   },
   overviewText: {
     fontSize: 11,
-    color: '#C9D1D9',
+    color: '#475569',
     fontWeight: '600',
   },
   navButton: {
@@ -729,15 +738,15 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(22, 27, 34, 0.95)',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.18)',
+    borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 6,
-    shadowColor: '#000',
+    elevation: 4,
+    shadowColor: '#64748B',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
   },
   fabUserInner: {
@@ -750,7 +759,7 @@ const styles = StyleSheet.create({
   },
   fabIcon: {
     fontSize: 18,
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: 'bold',
   },
   fabBtnLeft: {
@@ -760,12 +769,16 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 23,
-    backgroundColor: 'rgba(22, 27, 34, 0.95)',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.18)',
+    borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 6,
+    elevation: 4,
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
     zIndex: 10,
   },
 
@@ -779,7 +792,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
     zIndex: 8,
   },
@@ -787,7 +801,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: '#CBD5E1',
     alignSelf: 'center',
     marginTop: 8,
   },
@@ -804,7 +818,7 @@ const styles = StyleSheet.create({
   },
   coordLabel: {
     fontSize: 10,
-    color: '#8B949E',
+    color: '#64748B',
     fontWeight: '700',
     letterSpacing: 0.8,
     marginBottom: 4,
@@ -812,13 +826,13 @@ const styles = StyleSheet.create({
   coordValue: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#0F172A',
     letterSpacing: -0.5,
   },
   coordDivider: {
     width: 1,
     height: 36,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#E2E8F0',
     marginHorizontal: SPACING.md,
   },
 });

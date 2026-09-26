@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.os.Build
 import android.os.IBinder
@@ -37,6 +38,9 @@ class FallMonitoringService : Service() {
         const val ACTION_START = "com.doanapp.ACTION_START_MONITORING"
         const val ACTION_STOP = "com.doanapp.ACTION_STOP_MONITORING"
         const val ACTION_SYNC_DEVICES = "com.doanapp.ACTION_SYNC_DEVICES"
+        const val ACTION_START_ALARM = "com.doanapp.ACTION_START_ALARM"
+        const val ACTION_STOP_ALARM = "com.doanapp.ACTION_STOP_ALARM"
+        const val ACTION_DISMISS_NOTIFICATIONS = "com.doanapp.ACTION_DISMISS_NOTIFICATIONS"
         const val EXTRA_DEVICE_ID = "deviceId"
 
         private const val PREFS_NAME = "CareDropBackground"
@@ -46,7 +50,13 @@ class FallMonitoringService : Service() {
 
     private val activeListeners = ConcurrentHashMap<String, ListenerRegistration>()
     private var userListener: ListenerRegistration? = null
+    private var currentListeningEmail: String? = null
     private lateinit var prefs: SharedPreferences
+
+    // ─── Alarm state ──────────────────────────────────────────────────────────
+    private var alarmMediaPlayer: MediaPlayer? = null
+    private var alarmVibrator: Vibrator? = null
+    private var alarmVibratorManager: VibratorManager? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -64,6 +74,58 @@ class FallMonitoringService : Service() {
         if (action == ACTION_STOP) {
             stopMonitoring()
             stopSelf()
+            return START_NOT_STICKY
+        }
+
+        // Phát âm thanh/rung báo động (như chuông báo thức) VÀ hiển thị thông báo té ngã khẩn cấp
+        if (action == ACTION_START_ALARM) {
+            Log.d(TAG, "Starting alarm sound, vibration and notification from JS")
+            val rawAllowed = prefs.getStringSet(KEY_ALLOWED_DEVICE_IDS, null)
+            val devId = intent?.getStringExtra("deviceId")
+                ?: rawAllowed?.firstOrNull { it.isNotBlank() }
+                ?: "ESP32"
+            val devName = intent?.getStringExtra("deviceName") ?: devId
+            val fallTime = intent?.getStringExtra("fallTime") ?: ""
+            val lat = intent?.getDoubleExtra("latitude", 10.852302) ?: 10.852302
+            val lng = intent?.getDoubleExtra("longitude", 106.773779) ?: 106.773779
+            val batteryPct = intent?.getIntExtra("batteryPct", 100) ?: 100
+
+            triggerFallAlertNotification(devId, devName, fallTime, lat, lng, batteryPct)
+            return START_NOT_STICKY
+        }
+
+        // Dừng âm thanh/rung khi người dùng nhấn tắt chuông
+        if (action == ACTION_STOP_ALARM) {
+            Log.d(TAG, "Stopping alarm sound and vibration")
+            stopAlarm()
+            return START_NOT_STICKY
+        }
+
+        // Hủy thông báo khi người dùng nhấn "Đã kiểm tra — Tắt cảnh báo" trong app
+        if (action == ACTION_DISMISS_NOTIFICATIONS) {
+            Log.d(TAG, "Dismissing alert notifications and clearing fall flags")
+            stopAlarm()
+            dismissAlertNotifications()
+            try {
+                val rawAllowed = prefs.getStringSet(KEY_ALLOWED_DEVICE_IDS, mutableSetOf()) ?: mutableSetOf()
+                val db = FirebaseFirestore.getInstance()
+                val updates = mapOf<String, Any>(
+                    "fall_detected" to false,
+                    "ack_fall" to true
+                )
+                for (devId in rawAllowed) {
+                    val cleanId = devId.trim()
+                    if (cleanId.isNotEmpty()) {
+                        prefs.edit().putBoolean("last_fall_detected_$cleanId", false).apply()
+                        db.collection("devices").document(cleanId).update(updates)
+                            .addOnFailureListener {
+                                db.collection("devices").document(cleanId).set(updates, com.google.firebase.firestore.SetOptions.merge())
+                            }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error resetting fall flags in service", e)
+            }
             return START_NOT_STICKY
         }
 
@@ -145,14 +207,23 @@ class FallMonitoringService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID_SERVICE,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            )
-        } else {
-            startForeground(NOTIFICATION_ID_SERVICE, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID_SERVICE,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else {
+                startForeground(NOTIFICATION_ID_SERVICE, notification)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in startForeground (dataSync): ${e.message}", e)
+            try {
+                startForeground(NOTIFICATION_ID_SERVICE, notification)
+            } catch (e2: Exception) {
+                Log.e(TAG, "Fallback startForeground also failed: ${e2.message}", e2)
+            }
         }
     }
 
@@ -160,8 +231,14 @@ class FallMonitoringService : Service() {
      * Đồng bộ danh sách thiết bị được phép kêu và bắt đầu lắng nghe Firestore
      */
     private fun syncAndStartListeners() {
-        // 1. Nếu có user_email, lắng nghe tài khoản để tự động cập nhật danh sách pairedDevices từ Firestore
+        // 1. Nếu có user_email, lắng nghe tài khoản để tự động cập nhật danh sách pairedDevices/espId từ Firestore
         val userEmail = prefs.getString("user_email", null)?.trim()?.lowercase()
+        if (currentListeningEmail != userEmail) {
+            userListener?.remove()
+            userListener = null
+            currentListeningEmail = userEmail
+        }
+
         if (!userEmail.isNullOrEmpty() && userListener == null) {
             try {
                 Log.d(TAG, "Attaching Firestore listener for user: $userEmail")
@@ -173,9 +250,9 @@ class FallMonitoringService : Service() {
                             return@addSnapshotListener
                         }
                         if (snapshot != null && snapshot.exists()) {
+                            val newIds = HashSet<String>()
                             val rawList = snapshot.get("pairedDevices") as? List<*>
                             if (rawList != null) {
-                                val newIds = HashSet<String>()
                                 for (item in rawList) {
                                     if (item is Map<*, *>) {
                                         val id = item["id"] as? String
@@ -188,11 +265,19 @@ class FallMonitoringService : Service() {
                                         newIds.add(item.trim().uppercase())
                                     }
                                 }
-                                if (newIds.isNotEmpty()) {
-                                    Log.d(TAG, "Auto-synced devices from Firestore user document: $newIds")
-                                    prefs.edit().putStringSet(KEY_ALLOWED_DEVICE_IDS, newIds).apply()
-                                    syncDeviceListeners()
-                                }
+                            }
+                            val espId = (snapshot.getString("espId") ?: snapshot.getString("deviceId"))?.trim()
+                            if (!espId.isNullOrEmpty()) {
+                                newIds.add(espId)
+                                newIds.add(espId.uppercase())
+                            }
+                            if (newIds.isNotEmpty()) {
+                                Log.d(TAG, "Auto-synced devices from Firestore user document: $newIds")
+                                val existing = prefs.getStringSet(KEY_ALLOWED_DEVICE_IDS, mutableSetOf()) ?: mutableSetOf()
+                                val combined = HashSet(existing)
+                                combined.addAll(newIds)
+                                prefs.edit().putStringSet(KEY_ALLOWED_DEVICE_IDS, combined).apply()
+                                syncDeviceListeners()
                             }
                         }
                     }
@@ -243,13 +328,14 @@ class FallMonitoringService : Service() {
 
                 if (snapshot != null && snapshot.exists()) {
                     val fallDetected = snapshot.getBoolean("fall_detected") ?: false
+                    val ackFall = snapshot.getBoolean("ack_fall") ?: false
                     val fallTime = snapshot.getString("fall_time") ?: ""
                     val latitude = snapshot.getDouble("latitude") ?: 10.84
                     val longitude = snapshot.getDouble("longitude") ?: 106.77
                     val batteryPct = snapshot.getLong("battery_pct")?.toInt() ?: 100
                     val deviceName = snapshot.getString("name") ?: deviceId
 
-                    Log.d(TAG, "Device $deviceId: fall_detected=$fallDetected, fall_time=$fallTime")
+                    Log.d(TAG, "Device $deviceId: fall_detected=$fallDetected, ack_fall=$ackFall, fall_time=$fallTime")
 
                     val keyFallDetected = "last_fall_detected_$deviceId"
                     val keyFallTime = "last_fall_time_$deviceId"
@@ -258,7 +344,7 @@ class FallMonitoringService : Service() {
                     val lastFallTime = prefs.getString(keyFallTime, "") ?: ""
 
                     if (fallDetected) {
-                        val isNewFall = !lastFallDetected || (fallTime.isNotEmpty() && fallTime != lastFallTime)
+                        val isNewFall = !lastFallDetected || (fallTime.isNotEmpty() && fallTime != lastFallTime) || (!ackFall && alarmMediaPlayer == null)
                         if (isNewFall) {
                             Log.w(TAG, "🚨 NEW FALL DETECTED ON $deviceId ($deviceName)! Triggering background alert!")
                             prefs.edit()
@@ -270,6 +356,7 @@ class FallMonitoringService : Service() {
                         }
                     } else {
                         prefs.edit().putBoolean(keyFallDetected, false).apply()
+                        stopMediaAndVibration()
                     }
                 }
             }
@@ -290,6 +377,7 @@ class FallMonitoringService : Service() {
     ) {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+        // Tap vào thông báo → mở app
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("notification_type", "fall_detected")
@@ -299,7 +387,7 @@ class FallMonitoringService : Service() {
             putExtra("latitude", latitude)
             putExtra("longitude", longitude)
         }
-        val fullScreenPendingIntent = PendingIntent.getActivity(
+        val openAppPendingIntent = PendingIntent.getActivity(
             this,
             deviceId.hashCode(),
             openAppIntent,
@@ -322,66 +410,156 @@ class FallMonitoringService : Service() {
         val locationStr = String.format(Locale.US, "📍 Vị trí: %.6f°N, %.6f°E", latitude, longitude)
         val displayName = if (deviceName.isNotEmpty() && deviceName != deviceId) "$deviceName ($deviceId)" else deviceId
 
-        val alarmSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        // Action xác nhận & tắt cảnh báo trực tiếp từ thanh thông báo
+        val ackIntent = Intent(this, FallMonitoringService::class.java).apply {
+            action = ACTION_DISMISS_NOTIFICATIONS
+        }
+        val ackPendingIntent = PendingIntent.getService(
+            this,
+            (deviceId + "_ack").hashCode(),
+            ackIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val alertNotification = NotificationCompat.Builder(this, CHANNEL_ALERT_ID)
             .setContentTitle("🚨 CẢNH BÁO TÉ NGÃ: $displayName")
-            .setContentText("Phát hiện té ngã lúc $timeStr. $locationStr (Pin: $batteryPct%)")
-            .setStyle(NotificationCompat.BigTextStyle().bigText("Phát hiện sự kiện té ngã từ $displayName lúc $timeStr.\n$locationStr\nPin thiết bị: $batteryPct%\n\nNhấn để mở ứng dụng và xem chi tiết ngay lập tức!"))
+            .setContentText("Phát hiện té ngã lúc $timeStr – Nhấn để mở ứng dụng")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(
+                "Phát hiện sự kiện té ngã từ $displayName lúc $timeStr.\n" +
+                "$locationStr\nPin thiết bị: $batteryPct%\n\n" +
+                "Nhấn vào để mở ứng dụng hỗ trợ ngay!"
+            ))
             .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setContentIntent(fullScreenPendingIntent)
-            .setFullScreenIntent(fullScreenPendingIntent, true)
-            .setSound(alarmSoundUri)
-            .setVibrate(longArrayOf(0, 800, 400, 800, 400, 800, 400, 800))
-            .setAutoCancel(true)
-            .addAction(R.mipmap.ic_launcher, "XEM NGAY", fullScreenPendingIntent)
+            .setContentIntent(openAppPendingIntent)
+            .setAutoCancel(false)
+            .setOngoing(true)
+            .addAction(R.mipmap.ic_launcher, "✓ Đã kiểm tra — Tắt cảnh báo", ackPendingIntent)
             .build()
 
-        // Notification ID duy nhất theo thiết bị để không ghi đè nếu nhiều thiết bị té ngã cùng lúc
+        // Notification ID duy nhất theo thiết bị
         val notifId = NOTIFICATION_ID_ALERT + (Math.abs(deviceId.hashCode()) % 10000) + 1
         notificationManager.notify(notifId, alertNotification)
 
-        // Rung thiết bị mạnh
-        triggerVibration()
+        // Báo cho React Native ngay lập tức nếu app đang mở
+        CareDropBridgeModule.emitFallAlert(deviceId, deviceName, fallTime, latitude, longitude)
 
-        // Phát chuông báo động to rõ ràng trong nền
-        try {
-            val ringtone = RingtoneManager.getRingtone(applicationContext, alarmSoundUri)
-            ringtone?.play()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error playing alarm ringtone", e)
-        }
+        // Phát báo động lặp lại liên tục (như báo thức)
+        startAlarm()
     }
 
-    private fun triggerVibration() {
+
+    /**
+     * Phát âm thanh báo thức lặp lại + rung lặp lại liên tục
+     * cho đến khi người dùng nhấn "Tắt báo động"
+     */
+    private fun startAlarm() {
+        // Dừng âm thanh/rung cũ nếu đang phát, TUYỆT ĐỐI không hủy thông báo trên khay hệ thống
+        stopMediaAndVibration()
+
+        // ── Phát âm thanh lặp lại ──────────────────────────────────────────
         try {
-            val pattern = longArrayOf(0, 800, 400, 800, 400, 800, 400, 800)
+            val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+
+            alarmMediaPlayer = MediaPlayer().apply {
+                setAudioAttributes(audioAttributes)
+                setDataSource(applicationContext, alarmUri)
+                isLooping = true  // Lặp lại vô tận
+                setVolume(1.0f, 1.0f)
+                prepare()
+                start()
+            }
+            Log.d(TAG, "Alarm MediaPlayer started (looping)")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting alarm MediaPlayer", e)
+        }
+
+        // ── Rung lặp lại liên tục ──────────────────────────────────────────
+        try {
+            val pattern = longArrayOf(0, 900, 300, 900, 300, 900, 300)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vibratorManager?.defaultVibrator?.vibrate(VibrationEffect.createWaveform(pattern, -1))
+                alarmVibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                alarmVibrator = alarmVibratorManager?.defaultVibrator
+                alarmVibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))  // repeat từ index 0
             } else {
                 @Suppress("DEPRECATION")
-                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                alarmVibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator?.vibrate(VibrationEffect.createWaveform(pattern, -1))
+                    alarmVibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
                 } else {
                     @Suppress("DEPRECATION")
-                    vibrator?.vibrate(pattern, -1)
+                    alarmVibrator?.vibrate(pattern, 0)  // repeat từ index 0
                 }
             }
+            Log.d(TAG, "Continuous vibration started")
         } catch (e: Exception) {
-            Log.e(TAG, "Error triggering vibration", e)
+            Log.e(TAG, "Error starting continuous vibration", e)
         }
     }
 
+    /**
+     * Dừng riêng âm thanh MediaPlayer và rung Vibrator.
+     * Giữ nguyên thông báo trong Notification Drawer để người dùng có thể xem lại.
+     */
+    private fun stopMediaAndVibration() {
+        try {
+            alarmMediaPlayer?.let {
+                if (it.isPlaying) it.stop()
+                it.release()
+            }
+            alarmMediaPlayer = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping alarm MediaPlayer", e)
+        }
+
+        try {
+            alarmVibrator?.cancel()
+            alarmVibrator = null
+            alarmVibratorManager = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping vibration", e)
+        }
+    }
+
+    /**
+     * Dừng âm thanh và rung báo động khi người dùng bấm tắt hoặc hết thời gian báo.
+     * KHÔNG hủy các thông báo trên thanh thông báo.
+     */
+    private fun stopAlarm() {
+        stopMediaAndVibration()
+        Log.d(TAG, "Alarm sound and vibration stopped")
+    }
+
+    /**
+     * Chỉ xóa các thông báo cảnh báo té ngã khi người dùng bấm nút xác nhận trong app.
+     */
+    fun dismissAlertNotifications() {
+        try {
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            for (i in 0..10000) {
+                notificationManager.cancel(NOTIFICATION_ID_ALERT + i)
+            }
+            Log.d(TAG, "Alert notifications cleared by user dismissal")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error canceling alert notifications", e)
+        }
+    }
+
+
+
     private fun stopMonitoring() {
+        stopAlarm()  // Dừng báo động nếu đang phát
         userListener?.remove()
         userListener = null
-        for ((_, reg) in activeListeners) {
+        for (reg in activeListeners.values) {
             reg.remove()
         }
         activeListeners.clear()

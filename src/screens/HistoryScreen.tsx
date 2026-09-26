@@ -81,7 +81,7 @@ function EventItem({ event, onViewMap, onAcknowledge }: EventItemProps) {
   return (
     <View style={[styles.eventCard, SHADOW.sm]}>
       <LinearGradient
-        colors={['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.02)']}
+        colors={['#FFFFFF', '#FFFFFF']}
         style={StyleSheet.absoluteFill}
       />
       {/* Left accent */}
@@ -208,15 +208,15 @@ export default function HistoryScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       <LinearGradient
-        colors={['#0D1117', '#161B22']}
+        colors={['#F4F8FD', '#EEF4FA']}
         style={StyleSheet.absoluteFill}
       />
 
       {/* Header */}
       <LinearGradient
-        colors={['rgba(13,17,23,1)', 'rgba(13,17,23,0)']}
+        colors={['rgba(244,248,253,1)', 'rgba(244,248,253,0)']}
         style={styles.headerGradient}
         pointerEvents="none"
       />
@@ -321,13 +321,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: RADIUS.md,
-    backgroundColor: 'rgba(255,69,58,0.15)',
+    backgroundColor: '#FEE2E2',
     borderWidth: 1,
-    borderColor: 'rgba(255,69,58,0.3)',
+    borderColor: '#FECACA',
   },
   clearBtnText: {
     fontSize: FONT.xs,
-    color: COLORS.danger,
+    color: '#DC2626',
     fontWeight: '700',
   },
 
@@ -342,13 +342,19 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: RADIUS.full,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
     paddingVertical: SPACING.sm,
     alignItems: 'center',
     overflow: 'hidden',
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
   filterBtnActive: { borderColor: COLORS.primary },
-  filterText: { fontSize: FONT.sm, color: COLORS.textTertiary, fontWeight: '600' },
+  filterText: { fontSize: FONT.sm, color: '#64748B', fontWeight: '600' },
   filterTextActive: { color: '#fff', fontWeight: '700' },
 
   listContent: { paddingHorizontal: SPACING.xl, paddingBottom: 100 },
@@ -359,17 +365,22 @@ const styles = StyleSheet.create({
     marginVertical: SPACING.md,
     gap: SPACING.sm,
   },
-  dateLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
-  dateText: { fontSize: FONT.xs, color: COLORS.textTertiary, fontWeight: '600', letterSpacing: 0.5 },
+  dateLine: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
+  dateText: { fontSize: FONT.xs, color: '#94A3B8', fontWeight: '600', letterSpacing: 0.5 },
 
   eventCard: {
     borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#E2E8F0',
     overflow: 'hidden',
-    backgroundColor: COLORS.bgSecondary,
+    backgroundColor: '#FFFFFF',
     marginBottom: SPACING.md,
     flexDirection: 'row',
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
   },
   eventAccent: { width: 4 },
   eventContent: {
@@ -383,51 +394,52 @@ const styles = StyleSheet.create({
   eventIconGradient: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   eventIcon: { fontSize: 20 },
   eventInfo: { flex: 1 },
-  eventTitle: { fontSize: FONT.md, fontWeight: '700', color: COLORS.textPrimary },
+  eventTitle: { fontSize: FONT.md, fontWeight: '700', color: '#0F172A' },
   eventDeviceBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(79,70,229,0.15)',
+    backgroundColor: 'rgba(0,136,255,0.08)',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: RADIUS.sm,
     borderWidth: 1,
-    borderColor: 'rgba(79,70,229,0.3)',
+    borderColor: 'rgba(0,136,255,0.2)',
     marginTop: 3,
     marginBottom: 1,
   },
   eventDeviceText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#A5B4FC',
+    color: '#0088FF',
   },
-  eventTime: { fontSize: FONT.xs, color: COLORS.textTertiary, marginTop: 2 },
-  eventCoord: { fontSize: FONT.xs, color: COLORS.textSecondary, marginTop: 2 },
+  eventTime: { fontSize: FONT.xs, color: '#64748B', marginTop: 2 },
+  eventCoord: { fontSize: FONT.xs, color: '#475569', marginTop: 2 },
   eventFooter: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.xs },
   battChip: {
     borderWidth: 1,
     borderRadius: RADIUS.full,
     paddingHorizontal: 8,
     paddingVertical: 2,
+    backgroundColor: '#F8FAFC',
   },
   battText: { fontSize: 10, fontWeight: '600' },
   ackChip: {
-    backgroundColor: 'rgba(52,199,89,0.15)',
+    backgroundColor: '#DCFCE7',
     borderRadius: RADIUS.full,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderWidth: 1,
-    borderColor: 'rgba(52,199,89,0.3)',
+    borderColor: '#BBF7D0',
   },
-  ackText: { fontSize: 10, color: COLORS.success, fontWeight: '600' },
+  ackText: { fontSize: 10, color: '#16A34A', fontWeight: '600' },
   unackChip: {
-    backgroundColor: 'rgba(255,149,0,0.15)',
+    backgroundColor: '#FEF3C7',
     borderRadius: RADIUS.full,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderWidth: 1,
-    borderColor: 'rgba(255,149,0,0.4)',
+    borderColor: '#FDE68A',
   },
-  unackText: { fontSize: 10, color: COLORS.warning, fontWeight: '700' },
+  unackText: { fontSize: 10, color: '#D97706', fontWeight: '700' },
 
   viewBtn: { borderRadius: RADIUS.md, overflow: 'hidden' },
   viewBtnGradient: { paddingHorizontal: 12, paddingVertical: 8 },

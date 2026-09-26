@@ -239,10 +239,10 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-      <LinearGradient colors={['#0D1117', '#161B22']} style={StyleSheet.absoluteFill} />
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+      <LinearGradient colors={['#F4F8FD', '#EEF4FA']} style={StyleSheet.absoluteFill} />
       <LinearGradient
-        colors={['rgba(13,17,23,1)', 'rgba(13,17,23,0)']}
+        colors={['rgba(244,248,253,1)', 'rgba(244,248,253,0)']}
         style={styles.headerGradient}
         pointerEvents="none"
       />
@@ -589,20 +589,25 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.lg,
     zIndex: 2,
   },
-  headerTitle: { fontSize: FONT.xxl, fontWeight: '800', color: COLORS.textPrimary },
-  headerSub: { fontSize: FONT.sm, color: COLORS.textTertiary, marginTop: 4 },
+  headerTitle: { fontSize: FONT.xxl, fontWeight: '800', color: '#0F172A' },
+  headerSub: { fontSize: FONT.sm, color: '#64748B', marginTop: 4 },
 
   section: { marginBottom: SPACING.lg, paddingHorizontal: SPACING.xl },
   sectionTitle: {
-    fontSize: FONT.xs, fontWeight: '700', color: COLORS.textTertiary,
+    fontSize: FONT.xs, fontWeight: '700', color: '#64748B',
     letterSpacing: 1.5, marginBottom: SPACING.sm, marginLeft: 4,
   },
   sectionCard: {
-    backgroundColor: COLORS.bgSecondary,
+    backgroundColor: '#FFFFFF',
     borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#E2E8F0',
     overflow: 'hidden',
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
   },
 
   // Google Account Card
@@ -631,33 +636,35 @@ const styles = StyleSheet.create({
   googleAccountName: {
     fontSize: FONT.md,
     fontWeight: '700',
-    color: COLORS.textPrimary,
+    color: '#0F172A',
     marginBottom: 2,
   },
   googleAccountEmail: {
     fontSize: FONT.xs,
-    color: COLORS.textSecondary,
+    color: '#64748B',
     marginBottom: 6,
   },
   googleStatusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(52, 211, 153, 0.15)',
+    backgroundColor: '#DCFCE7',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
   },
   googleStatusDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: COLORS.success,
+    backgroundColor: '#16A34A',
     marginRight: 5,
   },
   googleStatusText: {
     fontSize: 10,
-    color: COLORS.success,
+    color: '#16A34A',
     fontWeight: '600',
   },
 
@@ -671,11 +678,11 @@ const styles = StyleSheet.create({
     width: 38, height: 38, borderRadius: RADIUS.md,
     alignItems: 'center', justifyContent: 'center',
   },
-  rowLabel: { flex: 1, fontSize: FONT.md, color: COLORS.textPrimary, fontWeight: '500' },
+  rowLabel: { flex: 1, fontSize: FONT.md, color: '#0F172A', fontWeight: '500' },
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  rowValue: { fontSize: FONT.sm, color: COLORS.textSecondary },
-  rowArrow: { fontSize: 20, color: COLORS.textTertiary },
-  divider: { height: 1, backgroundColor: COLORS.border, marginLeft: 72 },
+  rowValue: { fontSize: FONT.sm, color: '#64748B' },
+  rowArrow: { fontSize: 20, color: '#94A3B8' },
+  divider: { height: 1, backgroundColor: '#E2E8F0', marginLeft: 72 },
 
   // Battery section
   batteryRow: {
@@ -685,21 +692,22 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   batteryInfo: {},
-  battLabel: { fontSize: FONT.sm, color: COLORS.textTertiary, marginBottom: 4 },
+  battLabel: { fontSize: FONT.sm, color: '#64748B', marginBottom: 4 },
   battValue: { fontSize: FONT.xxl, fontWeight: '800' },
 
   // Slider
   sliderWrap: { padding: SPACING.lg, paddingTop: SPACING.md },
-  sliderLabel: { fontSize: FONT.sm, color: COLORS.textSecondary, marginBottom: SPACING.sm },
+  sliderLabel: { fontSize: FONT.sm, color: '#475569', marginBottom: SPACING.sm },
   sliderRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   sliderBtn: {
     width: 34, height: 34, borderRadius: RADIUS.md, borderWidth: 1,
+    borderColor: '#E2E8F0',
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: '#F8FAFC',
   },
-  sliderBtnText: { color: COLORS.textPrimary, fontSize: FONT.lg, fontWeight: '700' },
+  sliderBtnText: { color: '#0F172A', fontSize: FONT.lg, fontWeight: '700' },
   track: {
-    flex: 1, height: 6, backgroundColor: 'rgba(255,255,255,0.08)',
+    flex: 1, height: 6, backgroundColor: '#E2E8F0',
     borderRadius: RADIUS.full, overflow: 'hidden',
   },
   trackFill: { height: '100%', borderRadius: RADIUS.full },
@@ -759,14 +767,14 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: '#E2E8F0',
   },
   devAvatarFalling: {
-    backgroundColor: 'rgba(255,69,58,0.2)',
+    backgroundColor: '#FEE2E2',
     borderColor: COLORS.danger,
   },
   devNameRow: {
@@ -777,22 +785,22 @@ const styles = StyleSheet.create({
   devNameText: {
     fontSize: FONT.md,
     fontWeight: '700',
-    color: COLORS.textPrimary,
+    color: '#0F172A',
     flex: 1,
     marginRight: 8,
   },
   activeDevBadge: {
-    backgroundColor: 'rgba(52,199,89,0.15)',
+    backgroundColor: '#DCFCE7',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: RADIUS.full,
     borderWidth: 1,
-    borderColor: 'rgba(52,199,89,0.3)',
+    borderColor: '#BBF7D0',
   },
   activeDevBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: COLORS.success,
+    color: '#16A34A',
   },
   devIdText: {
     fontSize: FONT.xs,

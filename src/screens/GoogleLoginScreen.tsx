@@ -16,10 +16,11 @@ import {
 import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../context/AuthContext';
+import { resendActivationCode, registerUserPendingApproval } from '../services/authService';
 import { COLORS, FONT, RADIUS, SHADOW, SPACING } from '../constants/theme';
 
 export default function GoogleLoginScreen() {
-  const { login, loginWithPassword } = useAuth();
+  const { login, loginWithPassword, activateAccount } = useAuth();
   const webViewRef = useRef<WebView>(null);
 
   const [isWebModalVisible, setWebModalVisible] = useState(false);
@@ -33,6 +34,27 @@ export default function GoogleLoginScreen() {
   const [credEmail, setCredEmail] = useState('');
   const [credPassword, setCredPassword] = useState('');
   const [isCredLoading, setIsCredLoading] = useState(false);
+
+  // State cho Modal Kích hoạt tài khoản bằng mã gửi về Gmail
+  const [isActivationModalVisible, setActivationModalVisible] = useState(false);
+  const [activationEmail, setActivationEmail] = useState('');
+  const [activationCode, setActivationCode] = useState('');
+  const [isActivating, setIsActivating] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [pendingUserProfile, setPendingUserProfile] = useState<{
+    uid: string;
+    email: string;
+    displayName?: string;
+    photoURL?: string;
+  } | null>(null);
+
+  // State cho Modal Đăng ký tài khoản Gmail mới
+  const [isRegModalVisible, setRegModalVisible] = useState(false);
+  const [regFullName, setRegFullName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regRole, setRegRole] = useState<'supervisor' | 'monitored_person'>('supervisor');
+  const [isRegistering, setIsRegistering] = useState(false);
 
   // Modern Mobile Chrome user agent to prevent 403 disallowed_useragent from Google
   const chromeUserAgent =
@@ -189,21 +211,40 @@ export default function GoogleLoginScreen() {
 
       const errMsg: string = err?.message || '';
 
-      if (errMsg.startsWith('UNREGISTERED_GMAIL:')) {
+      if (errMsg.startsWith('PENDING_APPROVAL:')) {
+        const pendingEmail = errMsg.replace('PENDING_APPROVAL:', '').trim();
+        lastRejectedEmailRef.current = pendingEmail;
+        Alert.alert(
+          'Đang chờ Quản trị viên duyệt ⏳',
+          `Yêu cầu đăng ký tài khoản Gmail [${pendingEmail}] đang chờ Quản trị viên xét duyệt.\n\nSau khi Quản trị viên phê duyệt, mã xác nhận kích hoạt gồm 6 chữ số sẽ được gửi về hộp thư Gmail của bạn. Vui lòng quay lại sau!`,
+          [{ text: 'Đã hiểu', style: 'default' }]
+        );
+      } else if (errMsg.startsWith('PENDING_ACTIVATION:')) {
+        const pendingEmail = errMsg.replace('PENDING_ACTIVATION:', '').trim();
+        lastRejectedEmailRef.current = null;
+        setActivationEmail(pendingEmail);
+        setPendingUserProfile({
+          uid: cleanMail,
+          email: cleanMail,
+          displayName: profile.displayName || cleanMail.split('@')[0],
+          photoURL: profile.photoURL || '',
+        });
+        setActivationCode('');
+        setActivationModalVisible(true);
+      } else if (errMsg.startsWith('UNREGISTERED_GMAIL:')) {
         const unregEmail = errMsg.replace('UNREGISTERED_GMAIL:', '').trim();
         lastRejectedEmailRef.current = unregEmail;
 
         Alert.alert(
           'Gmail chưa được đăng ký ⚠️',
-          `Tài khoản Gmail (${unregEmail}) chưa được Quản trị viên thêm vào hệ thống.\n\nVui lòng liên hệ Quản trị viên để được cấp phép hoặc đăng nhập lại bằng tài khoản Gmail khác.`,
+          `Tài khoản Gmail (${unregEmail}) chưa được thêm vào hệ thống CareDrop.\n\nBạn có muốn gửi yêu cầu đăng ký tài khoản này ngay bây giờ để được Quản trị viên cấp phép không?`,
           [
             {
-              text: 'Đăng nhập lại',
+              text: 'Đăng ký ngay 📝',
               onPress: () => {
-                setWebViewKey((prev) => prev + 1);
-                setTimeout(() => {
-                  setWebModalVisible(true);
-                }, 300);
+                setRegEmail(unregEmail);
+                setRegFullName(profile.displayName || '');
+                setRegModalVisible(true);
               },
             },
             {
@@ -234,6 +275,30 @@ export default function GoogleLoginScreen() {
             },
           ],
           { cancelable: false }
+        );
+      } else if (
+        errMsg.toLowerCase().includes('offline') ||
+        errMsg.toLowerCase().includes('unavailable') ||
+        errMsg.toLowerCase().includes('network')
+      ) {
+        Alert.alert(
+          'Kết nối máy chủ bị gián đoạn 🌐',
+          'Không thể kết nối đến máy chủ dữ liệu do thiết bị đang ngoại tuyến hoặc kết nối mạng không ổn định.\n\nVui lòng kiểm tra lại kết nối Wifi/4G của bạn và thử đăng nhập lại.',
+          [
+            {
+              text: 'Đăng nhập lại',
+              onPress: () => {
+                setWebViewKey((prev) => prev + 1);
+                setTimeout(() => {
+                  setWebModalVisible(true);
+                }, 300);
+              },
+            },
+            {
+              text: 'Đóng',
+              style: 'cancel',
+            },
+          ]
         );
       } else {
         Alert.alert('Lỗi đăng nhập', errMsg || 'Không thể đồng bộ tài khoản Google.');
@@ -301,12 +366,12 @@ export default function GoogleLoginScreen() {
     `);
   };
 
-  // Đăng nhập bằng Email & Mật khẩu
+  // Đăng nhập Quản trị viên khẩn cấp (Chỉ dành cho ntuankiet0201@gmail.com)
   const handleCredentialLogin = async () => {
     const cleanMail = credEmail.trim().toLowerCase();
     const cleanPass = credPassword.trim();
     if (!cleanMail || !cleanPass) {
-      Alert.alert('Chưa nhập đủ thông tin', 'Vui lòng nhập Email và Mật khẩu.');
+      Alert.alert('Chưa nhập đủ thông tin', 'Vui lòng nhập đầy đủ Email và Mật khẩu.');
       return;
     }
     setIsCredLoading(true);
@@ -315,32 +380,110 @@ export default function GoogleLoginScreen() {
       setCredModalVisible(false);
     } catch (err: any) {
       const errMsg: string = err?.message || '';
-      if (errMsg.startsWith('UNREGISTERED_GMAIL:')) {
-        const unregEmail = errMsg.replace('UNREGISTERED_GMAIL:', '').trim();
+      if (errMsg.startsWith('PENDING_APPROVAL:')) {
+        const pendingEmail = errMsg.replace('PENDING_APPROVAL:', '').trim();
         Alert.alert(
-          'Gmail chưa được đăng ký ⚠️',
-          `Tài khoản Gmail (${unregEmail}) chưa được Quản trị viên thêm vào hệ thống.\n\nVui lòng liên hệ Quản trị viên để được cấp phép hoặc thử lại với tài khoản khác.`,
-          [
-            {
-              text: 'Đăng nhập lại',
-              onPress: () => {
-                setCredPassword('');
-              },
-            },
-            {
-              text: 'Đóng',
-              style: 'cancel',
-            },
-          ],
-          { cancelable: false }
+          'Đang chờ Quản trị viên duyệt ⏳',
+          `Tài khoản Gmail [${pendingEmail}] đang chờ Quản trị viên phê duyệt.\n\nSau khi Quản trị viên cho phép, mã kích hoạt gồm 6 chữ số sẽ được gửi về Gmail của bạn.`,
+          [{ text: 'Đã hiểu' }]
         );
-      } else if (errMsg.includes('khóa')) {
-        Alert.alert('Tài khoản bị khóa 🔒', errMsg);
-      } else {
-        Alert.alert('Đăng nhập thất bại', errMsg || 'Không thể đăng nhập tài khoản.');
+        return;
       }
+      if (errMsg.startsWith('PENDING_ACTIVATION:')) {
+        const pendingEmail = errMsg.replace('PENDING_ACTIVATION:', '').trim();
+        setActivationEmail(pendingEmail);
+        setActivationCode('');
+        setCredModalVisible(false);
+        setActivationModalVisible(true);
+        return;
+      }
+      Alert.alert('Đăng nhập thất bại', errMsg || 'Mật khẩu Quản trị viên không chính xác.');
     } finally {
       setIsCredLoading(false);
+    }
+  };
+
+  // Xử lý gửi yêu cầu đăng ký tài khoản Gmail mới tới Quản trị viên
+  const handleRegisterSubmit = async () => {
+    const cleanName = regFullName.trim();
+    const cleanMail = regEmail.trim().toLowerCase();
+    const cleanPhone = regPhone.trim();
+
+    if (!cleanName) {
+      Alert.alert('Chưa nhập Họ và tên', 'Vui lòng nhập đầy đủ Họ và tên của bạn.');
+      return;
+    }
+
+    if (!cleanMail) {
+      Alert.alert('Chưa nhập Gmail', 'Vui lòng nhập địa chỉ Gmail của bạn.');
+      return;
+    }
+
+    setIsRegistering(true);
+    try {
+      await registerUserPendingApproval({
+        displayName: cleanName,
+        email: cleanMail,
+        phoneNumber: cleanPhone,
+        role: regRole,
+      });
+
+      const roleLabel =
+        regRole === 'monitored_person' ? 'Người được giám sát' : 'Người giám sát';
+
+      setRegModalVisible(false);
+      setRegFullName('');
+      setRegEmail('');
+      setRegPhone('');
+
+      Alert.alert(
+        'Gửi yêu cầu đăng ký thành công! 🎉',
+        `Yêu cầu đăng ký tài khoản Gmail [${cleanMail}] với phân quyền "${roleLabel}" đã được gửi tới Quản trị viên.\n\n⏳ Sau khi Quản trị viên xem xét và cho phép, mã xác nhận kích hoạt gồm 6 chữ số sẽ được gửi về hộp thư Gmail của bạn.\n\n⚠️ Lưu ý: Sau khi đăng ký, phân quyền này sẽ không thể tự thay đổi, bạn chỉ có thể liên hệ Quản trị viên để đổi phân quyền.`
+      );
+    } catch (err: any) {
+      Alert.alert('Lỗi đăng ký', err.message || 'Không thể gửi yêu cầu đăng ký.');
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  // Xác nhận mã kích hoạt 6 số gửi về Gmail
+  const handleConfirmActivation = async () => {
+    const cleanMail = activationEmail.trim().toLowerCase();
+    const cleanCode = activationCode.trim();
+    if (!cleanMail || !cleanCode || cleanCode.length < 6) {
+      Alert.alert('Chưa nhập mã', 'Vui lòng nhập đủ 6 chữ số mã kích hoạt đã gửi về Gmail.');
+      return;
+    }
+    setIsActivating(true);
+    try {
+      await activateAccount(cleanMail, cleanCode, pendingUserProfile || undefined);
+      setActivationModalVisible(false);
+      setActivationCode('');
+      setPendingUserProfile(null);
+      Alert.alert('Thành công! 🎉', 'Tài khoản đã được kích hoạt thành công.');
+    } catch (err: any) {
+      Alert.alert('Kích hoạt thất bại ❌', err.message || 'Mã kích hoạt không chính xác hoặc đã hết hạn.');
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
+  // Gửi lại mã kích hoạt mới trực tiếp về hòm thư Gmail của người dùng
+  const handleResendActivationCodeFromModal = async () => {
+    const cleanMail = activationEmail.trim().toLowerCase();
+    if (!cleanMail) return;
+    setIsResending(true);
+    try {
+      await resendActivationCode(cleanMail);
+      Alert.alert(
+        'Đã gửi lại mã kích hoạt ✉️',
+        `Mã kích hoạt mới đã được gửi về hòm thư Gmail [${cleanMail}].\n\nVui lòng mở ứng dụng Gmail trên điện thoại, kiểm tra Hộp thư đến (Inbox) hoặc Thư rác (Spam) để lấy mã.`
+      );
+    } catch (e: any) {
+      Alert.alert('Lỗi gửi mã', e?.message || 'Không thể gửi lại mã kích hoạt vào thời điểm này.');
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -385,9 +528,11 @@ export default function GoogleLoginScreen() {
           <View style={styles.securityBox}>
             <Text style={styles.securityBoxIcon}>🛡️</Text>
             <View style={styles.securityBoxContent}>
-              <Text style={styles.securityBoxTitle}>Chỉ tài khoản được cấp phép</Text>
+              <Text style={styles.securityBoxTitle}>Chỉ Gmail thật trên Google & được cấp phép</Text>
               <Text style={styles.securityBoxText}>
-                Hệ thống chỉ cho phép các tài khoản Gmail đã được Quản trị viên thêm vào hệ thống đăng nhập. Các tài khoản chưa đăng ký sẽ bị từ chối truy cập.
+                • Đăng nhập trực tiếp qua cổng Google (accounts.google.com).{'\n'}
+                • Tài khoản bắt buộc phải tồn tại thật trên Google và được Quản trị viên thêm vào hệ thống.{'\n'}
+                • Tuyệt đối không cho phép tài khoản ảo hoặc nhập tùy tiện.
               </Text>
             </View>
           </View>
@@ -408,17 +553,40 @@ export default function GoogleLoginScreen() {
             <Text style={styles.googleMainBtnText}>Tiếp tục với Google</Text>
           </TouchableOpacity>
 
-          {/* CREDENTIAL LOGIN BUTTON */}
+          {/* Divider */}
+          <View style={styles.loginDivider}>
+            <View style={styles.loginDividerLine} />
+            <Text style={styles.loginDividerText}>HOẶC</Text>
+            <View style={styles.loginDividerLine} />
+          </View>
+
+          {/* REGISTER ACCOUNT BUTTON */}
           <TouchableOpacity
-            style={styles.credLoginBtn}
-            onPress={() => setCredModalVisible(true)}
+            style={styles.registerBtn}
+            onPress={() => setRegModalVisible(true)}
             activeOpacity={0.85}
           >
-            <Text style={styles.credLoginBtnText}>🔑 Đăng nhập bằng Mật khẩu được cấp</Text>
+            <Text style={styles.registerBtnIcon}>📝</Text>
+            <Text style={styles.registerBtnText}>Đăng ký tài khoản Gmail mới</Text>
+          </TouchableOpacity>
+
+          {/* ACTIVATE WITH CODE LINK */}
+          <TouchableOpacity
+            style={styles.activateCodeLink}
+            onPress={() => {
+              setActivationEmail('');
+              setActivationCode('');
+              setActivationModalVisible(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.activateCodeLinkText}>
+              🔑 Đã có mã kích hoạt từ Quản trị viên? Nhập mã tại đây
+            </Text>
           </TouchableOpacity>
 
           <Text style={styles.guaranteeText}>
-            ✓ Đăng nhập an toàn qua cổng chính thức accounts.google.com
+            ✓ Đăng nhập an toàn qua máy chủ chính thức accounts.google.com
           </Text>
         </View>
 
@@ -436,6 +604,22 @@ export default function GoogleLoginScreen() {
               <Text style={styles.footerLinkItem}>Điều khoản</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Admin Emergency Entry */}
+        <View style={{ alignItems: 'center', marginTop: 12, marginBottom: 20 }}>
+          <TouchableOpacity
+            onPress={() => {
+              setCredEmail('ntuankiet0201@gmail.com');
+              setCredPassword('');
+              setCredModalVisible(true);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 11, color: '#475569' }}>
+              ⚙️ Dành cho Quản trị viên (Khẩn cấp)
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -525,20 +709,20 @@ export default function GoogleLoginScreen() {
         </View>
       </Modal>
 
-      {/* ── CỬA SỔ ĐĂNG NHẬP BẰNG MẬT KHẨU (DO ADMIN CẤP) ── */}
+      {/* ── CỬA SỔ ĐĂNG NHẬP QUẢN TRỊ VIÊN KHẨN CẤP ── */}
       <Modal
         visible={isCredModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setCredModalVisible(false)}
+        onRequestClose={() => {}}
       >
         <View style={styles.credModalOverlay}>
           <View style={styles.credModalCard}>
             <View style={styles.credModalHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.credModalTitle}>Đăng nhập Mật khẩu</Text>
+                <Text style={styles.credModalTitle}>Quản trị viên Khẩn cấp</Text>
                 <Text style={styles.credModalSubtitle}>
-                  Tài khoản do Quản trị viên cấp hoặc Quản trị viên
+                  Chỉ dành cho Quản trị viên (ntuankiet0201@gmail.com). Người dùng bắt buộc phải đăng nhập bằng Google.
                 </Text>
               </View>
               <TouchableOpacity
@@ -549,22 +733,32 @@ export default function GoogleLoginScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Quick Admin fill chip */}
-            <TouchableOpacity
-              style={styles.adminChip}
-              onPress={() => {
-                setCredEmail('ntuankiet0201@gmail.com');
-                setCredPassword('admin123');
-              }}
-            >
-              <Text style={styles.adminChipText}>⚡ Quản trị viên (ntuankiet0201@gmail.com)</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+              <TouchableOpacity
+                style={{ backgroundColor: '#1E293B', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#334155' }}
+                onPress={() => {
+                  setCredEmail('ntuankiet0201@gmail.com');
+                  setCredPassword('admin123');
+                }}
+              >
+                <Text style={{ color: '#38BDF8', fontSize: 12, fontWeight: '600' }}>👑 Quản trị viên</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ backgroundColor: '#1E293B', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#334155' }}
+                onPress={() => {
+                  setCredEmail('nguyenbaophuc0102@gmail.com');
+                  setCredPassword('123456');
+                }}
+              >
+                <Text style={{ color: '#34D399', fontSize: 12, fontWeight: '600' }}>👁️ Người giám sát</Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.credInputGroup}>
-              <Text style={styles.credInputLabel}>EMAIL ĐĂNG NHẬP</Text>
+              <Text style={styles.credInputLabel}>EMAIL TÀI KHOẢN</Text>
               <TextInput
                 style={styles.credInput}
-                placeholder="VD: user@caredrop.com"
+                placeholder="email@gmail.com"
                 placeholderTextColor="#64748B"
                 value={credEmail}
                 onChangeText={setCredEmail}
@@ -597,6 +791,254 @@ export default function GoogleLoginScreen() {
               ) : (
                 <Text style={styles.credSubmitText}>Đăng nhập ngay ›</Text>
               )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── CỬA SỔ NHẬP MÃ KÍCH HOẠT TÀI KHOẢN (GỬI VỀ GMAIL) ── */}
+      <Modal
+        visible={isActivationModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.credModalOverlay}>
+          <View style={styles.activationCard}>
+            <View style={styles.credModalHeader}>
+              <View style={{ flex: 1 }}>
+                <View style={styles.activationBadge}>
+                  <Text style={styles.activationBadgeText}>📩 YÊU CẦU KÍCH HOẠT</Text>
+                </View>
+                <Text style={styles.activationTitle}>Xác nhận kích hoạt Gmail</Text>
+                <Text style={styles.activationSubtitle}>
+                  Mã xác nhận gồm 6 chữ số đã được gửi tới Gmail của bạn. Vui lòng kiểm tra hộp thư đến (hoặc Spam).
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.credCloseBtn}
+                onPress={() => setActivationModalVisible(false)}
+                disabled={isActivating}
+              >
+                <Text style={styles.credCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.activationTargetEmailBox}>
+              <Text style={styles.activationTargetEmailLabel}>Tài khoản Gmail:</Text>
+              <Text style={styles.activationTargetEmailText}>{activationEmail}</Text>
+            </View>
+
+            <View style={styles.credInputGroup}>
+              <Text style={styles.credInputLabel}>NHẬP MÃ KÍCH HOẠT (6 CHỮ SỐ)</Text>
+              <TextInput
+                style={styles.activationCodeInput}
+                placeholder="000000"
+                placeholderTextColor="#64748B"
+                value={activationCode}
+                onChangeText={(text) => setActivationCode(text.replace(/[^0-9]/g, '').slice(0, 6))}
+                keyboardType="number-pad"
+                maxLength={6}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.activationSubmitBtn, isActivating && { opacity: 0.7 }]}
+              onPress={handleConfirmActivation}
+              disabled={isActivating || isResending}
+              activeOpacity={0.85}
+            >
+              {isActivating ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.activationSubmitText}>Xác nhận & Vào ứng dụng ngay ›</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Nút gửi lại mã trực tiếp về Gmail */}
+            <TouchableOpacity
+              style={styles.activationResendBtn}
+              onPress={handleResendActivationCodeFromModal}
+              disabled={isActivating || isResending}
+              activeOpacity={0.7}
+            >
+              {isResending ? (
+                <ActivityIndicator size="small" color="#38BDF8" />
+              ) : (
+                <Text style={styles.activationResendText}>
+                  📩 Chưa nhận được mã? Gửi lại mã vào Gmail
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.activationCancelBtn}
+              onPress={() => setActivationModalVisible(false)}
+              disabled={isActivating || isResending}
+            >
+              <Text style={styles.activationCancelText}>Hủy / Đóng</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── CỬA SỔ ĐĂNG KÝ TÀI KHOẢN GMAIL MỚI (GỬI DUYỆT ADMIN) ── */}
+      <Modal
+        visible={isRegModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (!isRegistering) setRegModalVisible(false);
+        }}
+      >
+        <View style={styles.credModalOverlay}>
+          <View style={styles.regCard}>
+            <View style={styles.credModalHeader}>
+              <View style={{ flex: 1 }}>
+                <View style={styles.regBadge}>
+                  <Text style={styles.regBadgeText}>📝 ĐĂNG KÝ SỬ DỤNG CAREDROP</Text>
+                </View>
+                <Text style={styles.regTitle}>Đăng ký Gmail mới</Text>
+                <Text style={styles.regSubtitle}>
+                  Yêu cầu sẽ được gửi tới Quản trị viên để xét duyệt. Sau khi được duyệt, mã kích hoạt sẽ gửi về Gmail của bạn.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.credCloseBtn}
+                onPress={() => setRegModalVisible(false)}
+                disabled={isRegistering}
+              >
+                <Text style={styles.credCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+              {/* Họ và tên */}
+              <View style={styles.credInputGroup}>
+                <Text style={styles.credInputLabel}>HỌ VÀ TÊN *</Text>
+                <TextInput
+                  style={styles.credInput}
+                  placeholder="Ví dụ: Nguyễn Văn An"
+                  placeholderTextColor="#64748B"
+                  value={regFullName}
+                  onChangeText={setRegFullName}
+                  editable={!isRegistering}
+                />
+              </View>
+
+              {/* Gmail */}
+              <View style={styles.credInputGroup}>
+                <Text style={styles.credInputLabel}>ĐỊA CHỈ GMAIL *</Text>
+                <TextInput
+                  style={styles.credInput}
+                  placeholder="emailcuaban@gmail.com"
+                  placeholderTextColor="#64748B"
+                  value={regEmail}
+                  onChangeText={setRegEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  editable={!isRegistering}
+                />
+              </View>
+
+              {/* Số điện thoại */}
+              <View style={styles.credInputGroup}>
+                <Text style={styles.credInputLabel}>SỐ ĐIỆN THOẠI (TÙY CHỌN)</Text>
+                <TextInput
+                  style={styles.credInput}
+                  placeholder="Ví dụ: 0912345678"
+                  placeholderTextColor="#64748B"
+                  value={regPhone}
+                  onChangeText={setRegPhone}
+                  keyboardType="phone-pad"
+                  editable={!isRegistering}
+                />
+              </View>
+
+              {/* Phân quyền vai trò sử dụng */}
+              <View style={styles.credInputGroup}>
+                <Text style={styles.credInputLabel}>CHỌN PHÂN QUYỀN SỬ DỤNG *</Text>
+                <View style={styles.regRolePickerRow}>
+                  {/* Option 1: Người giám sát */}
+                  <TouchableOpacity
+                    style={[
+                      styles.regRoleOption,
+                      regRole === 'supervisor' && styles.regRoleOptionActiveSupervisor,
+                    ]}
+                    onPress={() => setRegRole('supervisor')}
+                    activeOpacity={0.8}
+                    disabled={isRegistering}
+                  >
+                    <Text style={styles.regRoleOptionIcon}>👁️</Text>
+                    <Text
+                      style={[
+                        styles.regRoleOptionTitle,
+                        regRole === 'supervisor' && styles.regRoleOptionTitleActiveSupervisor,
+                      ]}
+                    >
+                      Người giám sát
+                    </Text>
+                    <Text style={styles.regRoleOptionDesc}>
+                      Theo dõi người thân & nhận cảnh báo té ngã
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Option 2: Người được giám sát */}
+                  <TouchableOpacity
+                    style={[
+                      styles.regRoleOption,
+                      regRole === 'monitored_person' && styles.regRoleOptionActiveMonitored,
+                    ]}
+                    onPress={() => setRegRole('monitored_person')}
+                    activeOpacity={0.8}
+                    disabled={isRegistering}
+                  >
+                    <Text style={styles.regRoleOptionIcon}>🛡️</Text>
+                    <Text
+                      style={[
+                        styles.regRoleOptionTitle,
+                        regRole === 'monitored_person' && styles.regRoleOptionTitleActiveMonitored,
+                      ]}
+                    >
+                      Người được giám sát
+                    </Text>
+                    <Text style={styles.regRoleOptionDesc}>
+                      Sử dụng thiết bị đeo ESP32 & báo động té ngã
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Thông báo cam kết về phân quyền không được tự đổi */}
+              <View style={styles.regRoleNoticeBox}>
+                <Text style={styles.regRoleNoticeIcon}>⚠️</Text>
+                <Text style={styles.regRoleNoticeText}>
+                  <Text style={{ fontWeight: '800', color: '#F59E0B' }}>LƯU Ý VỀ PHÂN QUYỀN: </Text>
+                  Sau khi đăng ký, phân quyền tài khoản sẽ được cố định và không thể tự thay đổi trong app. Bạn chỉ có thể liên hệ Quản trị viên để thay đổi phân quyền.
+                </Text>
+              </View>
+            </ScrollView>
+
+            {/* Nút gửi yêu cầu đăng ký */}
+            <TouchableOpacity
+              style={[styles.regSubmitBtn, isRegistering && { opacity: 0.7 }]}
+              onPress={handleRegisterSubmit}
+              disabled={isRegistering}
+              activeOpacity={0.85}
+            >
+              {isRegistering ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.regSubmitText}>Gửi yêu cầu đăng ký cho Quản trị viên ›</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.activationCancelBtn}
+              onPress={() => setRegModalVisible(false)}
+              disabled={isRegistering}
+            >
+              <Text style={styles.activationCancelText}>Hủy / Đóng</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -637,12 +1079,12 @@ const styles = StyleSheet.create({
   appTitle: {
     fontSize: FONT.xxl,
     fontWeight: '900',
-    color: COLORS.textPrimary,
+    color: '#FFFFFF',
     letterSpacing: 0.5,
   },
   appSubtitle: {
     fontSize: FONT.xs,
-    color: COLORS.textTertiary,
+    color: 'rgba(255, 255, 255, 0.65)',
     marginTop: 4,
     textAlign: 'center',
   },
@@ -992,6 +1434,283 @@ const styles = StyleSheet.create({
   credSubmitText: {
     color: '#FFFFFF',
     fontSize: 15,
+    fontWeight: '700',
+  },
+  activationCard: {
+    backgroundColor: '#1E293B',
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    width: '100%',
+    maxWidth: 400,
+  },
+  activationBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  activationBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#F59E0B',
+    letterSpacing: 0.5,
+  },
+  activationTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  activationSubtitle: {
+    fontSize: 13,
+    color: '#94A3B8',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  activationTargetEmailBox: {
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  activationTargetEmailLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  activationTargetEmailText: {
+    fontSize: 14,
+    color: '#38BDF8',
+    fontWeight: '700',
+  },
+  activationCodeInput: {
+    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+    borderWidth: 2,
+    borderColor: '#38BDF8',
+    borderRadius: 14,
+    height: 56,
+    paddingHorizontal: 16,
+    fontSize: 24,
+    letterSpacing: 8,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    fontWeight: '800',
+  },
+  activationSubmitBtn: {
+    backgroundColor: '#059669',
+    borderRadius: 14,
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  activationSubmitText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  activationResendBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+  },
+  activationResendText: {
+    color: '#38BDF8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  activationCancelBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    paddingVertical: 6,
+  },
+  activationCancelText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // Login Divider
+  loginDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 14,
+  },
+  loginDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E2E8F0',
+  },
+  loginDividerText: {
+    marginHorizontal: 12,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#94A3B8',
+    letterSpacing: 1,
+  },
+
+  // Register Account Button
+  registerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0F172A',
+    borderRadius: 14,
+    height: 52,
+    borderWidth: 1,
+    borderColor: '#334155',
+    gap: 8,
+  },
+  registerBtnIcon: {
+    fontSize: 16,
+  },
+  registerBtnText: {
+    color: '#38BDF8',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  // Activate with Code Link
+  activateCodeLink: {
+    marginTop: 10,
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  activateCodeLinkText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+
+  // Registration Modal Card
+  regCard: {
+    backgroundColor: '#1E293B',
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '90%',
+  },
+  regBadge: {
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.4)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  regBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#38BDF8',
+    letterSpacing: 0.5,
+  },
+  regTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  regSubtitle: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  regRolePickerRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  regRoleOption: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+  },
+  regRoleOptionActiveSupervisor: {
+    borderColor: '#38BDF8',
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+  },
+  regRoleOptionActiveMonitored: {
+    borderColor: '#10B981',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+  },
+  regRoleOptionIcon: {
+    fontSize: 24,
+    marginBottom: 6,
+  },
+  regRoleOptionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  regRoleOptionTitleActiveSupervisor: {
+    color: '#38BDF8',
+  },
+  regRoleOptionTitleActiveMonitored: {
+    color: '#10B981',
+  },
+  regRoleOptionDesc: {
+    fontSize: 10,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  regRoleNoticeBox: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+    borderRadius: 12,
+    padding: 12,
+    marginVertical: 12,
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  regRoleNoticeIcon: {
+    fontSize: 16,
+    marginTop: 1,
+  },
+  regRoleNoticeText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#CBD5E1',
+    lineHeight: 16,
+  },
+  regSubmitBtn: {
+    backgroundColor: '#0284C7',
+    borderRadius: 14,
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  regSubmitText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '700',
   },
 });

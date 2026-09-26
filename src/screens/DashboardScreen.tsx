@@ -62,6 +62,7 @@ export default function DashboardScreen() {
     activeFallAlert,
     setActiveDeviceId,
     isConnected,
+    acknowledgefall,
     triggerEmergency,
     cancelEmergency,
   } = useDevice();
@@ -92,11 +93,11 @@ export default function DashboardScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       {/* Background gradient */}
       <LinearGradient
-        colors={['#0D1117', '#0D1B2A', '#0D1117']}
+        colors={['#F4F8FD', '#EEF4FA', '#F4F8FD']}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -214,9 +215,9 @@ export default function DashboardScreen() {
 
         {/* ── HERO STATUS CARD / EMPTY STATE ──────────────────── */}
         {pairedDevices.length === 0 ? (
-          <View style={[styles.heroCardEmpty, SHADOW.lg]}>
+          <View style={[styles.heroCardEmpty, SHADOW.md]}>
             <LinearGradient
-              colors={['rgba(99,102,241,0.15)', 'rgba(30,41,59,0.6)']}
+              colors={['rgba(0,136,255,0.06)', 'rgba(0,136,255,0.01)']}
               style={StyleSheet.absoluteFill}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -237,7 +238,7 @@ export default function DashboardScreen() {
               activeOpacity={0.85}
             >
               <LinearGradient
-                colors={['#6366F1', '#4F46E5']}
+                colors={['#0088FF', '#0066CC']}
                 style={styles.heroEmptyBtnGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
@@ -247,11 +248,11 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={[styles.heroCard, SHADOW.lg, { borderColor: `${statusColor}30` }]}>
+          <View style={[styles.heroCard, SHADOW.md, { borderColor: `${statusColor}40` }]}>
             <LinearGradient
               colors={isFall
-                ? ['rgba(255,69,58,0.12)', 'rgba(255,69,58,0.04)']
-                : ['rgba(48,209,88,0.10)', 'rgba(48,209,88,0.03)']}
+                ? ['rgba(239,68,68,0.08)', 'rgba(239,68,68,0.02)']
+                : ['rgba(22,163,74,0.08)', 'rgba(22,163,74,0.02)']}
               style={StyleSheet.absoluteFill}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -290,6 +291,25 @@ export default function DashboardScreen() {
                   ? `Lúc ${formatTime(deviceData?.fall_time)} — ${formatDate(deviceData?.fall_time)}`
                   : 'Không có sự cố nào được ghi nhận'}
               </Text>
+
+              {isFall && (
+                <TouchableOpacity
+                  style={styles.heroAckBtn}
+                  onPress={() => {
+                    acknowledgefall(deviceData?.device_id || activeDeviceId);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={['#FF9F0A', '#E07A00']}
+                    style={styles.heroAckBtnGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Text style={styles.heroAckBtnText}>✓  Đã kiểm tra — Tắt cảnh báo</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )}
@@ -454,12 +474,12 @@ const styles = StyleSheet.create({
   blob: { position: 'absolute', borderRadius: 9999 },
   blob1: {
     width: 300, height: 300,
-    backgroundColor: 'rgba(10,132,255,0.08)',
+    backgroundColor: 'rgba(0,136,255,0.05)',
     top: -100, right: -80,
   },
   blob2: {
     width: 200, height: 200,
-    backgroundColor: 'rgba(48,209,88,0.06)',
+    backgroundColor: 'rgba(22,163,74,0.04)',
     bottom: 200, left: -60,
   },
 
@@ -472,14 +492,14 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: FONT.sm,
-    color: COLORS.textTertiary,
+    color: '#64748B',
     fontWeight: '500',
     marginBottom: 2,
   },
   title: {
     fontSize: FONT.xxl,
     fontWeight: '800',
-    color: COLORS.textPrimary,
+    color: '#0F172A',
     letterSpacing: -0.5,
   },
   headerRight: {
@@ -511,10 +531,16 @@ const styles = StyleSheet.create({
   heroCard: {
     borderRadius: RADIUS.xxl,
     borderWidth: 1,
+    borderColor: '#E2E8F0',
     overflow: 'hidden',
-    backgroundColor: COLORS.bgSecondary,
+    backgroundColor: '#FFFFFF',
     marginBottom: SPACING.lg,
     padding: SPACING.xl,
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
   },
   heroTopRow: {
     flexDirection: 'row',
@@ -526,16 +552,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: '#F1F5F9',
     borderRadius: RADIUS.full,
     paddingHorizontal: SPACING.md,
     paddingVertical: 5,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#E2E8F0',
   },
   deviceDot: { width: 8, height: 8, borderRadius: 4 },
-  deviceId: { fontSize: FONT.xs, color: COLORS.textSecondary, fontWeight: '600', letterSpacing: 0.5 },
-  heroTime: { fontSize: FONT.sm, color: COLORS.textTertiary, fontWeight: '500' },
+  deviceId: { fontSize: FONT.xs, color: '#475569', fontWeight: '600', letterSpacing: 0.5 },
+  heroTime: { fontSize: FONT.sm, color: '#64748B', fontWeight: '500' },
   heroCenter: { alignItems: 'center', paddingVertical: SPACING.md },
   statusLabel: {
     fontSize: FONT.lg,
@@ -546,9 +572,31 @@ const styles = StyleSheet.create({
   },
   statusDate: {
     fontSize: FONT.sm,
-    color: COLORS.textTertiary,
+    color: '#64748B',
     marginTop: 6,
     textAlign: 'center',
+  },
+  heroAckBtn: {
+    marginTop: SPACING.md,
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    shadowColor: '#E07A00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  heroAckBtnGradient: {
+    paddingVertical: 10,
+    paddingHorizontal: SPACING.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroAckBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: FONT.sm,
+    letterSpacing: 0.3,
   },
 
   // Grid
@@ -563,7 +611,7 @@ const styles = StyleSheet.create({
   sosSection: { marginTop: SPACING.sm },
   sosSectionLabel: {
     fontSize: FONT.xs,
-    color: COLORS.textTertiary,
+    color: '#64748B',
     fontWeight: '700',
     letterSpacing: 1.5,
     marginBottom: SPACING.sm,
@@ -573,9 +621,9 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,69,58,0.4)',
+    borderColor: 'rgba(239,68,68,0.4)',
   },
-  sosBtnActive: { borderColor: '#FF453A' },
+  sosBtnActive: { borderColor: '#EF4444' },
   sosBtnGradient: {
     paddingVertical: SPACING.xl,
     alignItems: 'center',
@@ -591,7 +639,7 @@ const styles = StyleSheet.create({
   },
   sosBtnSub: {
     fontSize: FONT.sm,
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.85)',
     marginTop: 2,
   },
 
@@ -608,19 +656,24 @@ const styles = StyleSheet.create({
   devChipItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: RADIUS.full,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: '#E2E8F0',
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
   devChipItemSelected: {
-    backgroundColor: 'rgba(79,70,229,0.25)',
-    borderColor: '#6366F1',
+    backgroundColor: 'rgba(0,136,255,0.10)',
+    borderColor: '#0088FF',
   },
   devChipItemFall: {
-    backgroundColor: 'rgba(255,69,58,0.25)',
+    backgroundColor: 'rgba(239,68,68,0.12)',
     borderColor: COLORS.danger,
   },
   devChipIcon: {
@@ -629,12 +682,12 @@ const styles = StyleSheet.create({
   },
   devChipText: {
     fontSize: FONT.xs,
-    color: COLORS.textSecondary,
+    color: '#475569',
     fontWeight: '600',
     maxWidth: 140,
   },
   devChipTextSelected: {
-    color: '#A5B4FC',
+    color: '#0088FF',
     fontWeight: '700',
   },
   devChipTextFall: {
@@ -649,17 +702,17 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   addDevChip: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: '#CBD5E1',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: RADIUS.full,
   },
   addDevChipText: {
     fontSize: FONT.xs,
-    color: COLORS.textTertiary,
+    color: '#64748B',
     fontWeight: '600',
   },
 
@@ -667,14 +720,19 @@ const styles = StyleSheet.create({
   emptyDeviceChipBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(99,102,241,0.1)',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: 'rgba(99,102,241,0.3)',
+    borderColor: '#E2E8F0',
     borderStyle: 'dashed',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: RADIUS.lg,
     marginHorizontal: SPACING.xl,
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   emptyDeviceChipIcon: {
     fontSize: 16,
@@ -683,34 +741,39 @@ const styles = StyleSheet.create({
   emptyDeviceChipText: {
     flex: 1,
     fontSize: FONT.xs,
-    color: '#A5B4FC',
+    color: '#64748B',
     fontWeight: '600',
   },
   emptyDeviceChipPlus: {
     fontSize: FONT.xs,
-    color: '#818CF8',
+    color: '#0088FF',
     fontWeight: '700',
     marginLeft: 8,
   },
 
   // Empty State Hero Card
   heroCardEmpty: {
-    backgroundColor: '#161B22',
+    backgroundColor: '#FFFFFF',
     borderRadius: RADIUS.xxl,
     padding: SPACING.xl,
     marginBottom: SPACING.xl,
     borderWidth: 1,
-    borderColor: 'rgba(99,102,241,0.35)',
+    borderColor: '#E2E8F0',
     overflow: 'hidden',
     alignItems: 'center',
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
   },
   heroEmptyIconWrap: {
     width: 68,
     height: 68,
     borderRadius: 34,
-    backgroundColor: 'rgba(99,102,241,0.18)',
+    backgroundColor: 'rgba(0,136,255,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(99,102,241,0.4)',
+    borderColor: 'rgba(0,136,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.md,
@@ -719,14 +782,14 @@ const styles = StyleSheet.create({
   heroEmptyTitle: {
     fontSize: FONT.md,
     fontWeight: '900',
-    color: '#E6EDF3',
+    color: '#0F172A',
     letterSpacing: 0.8,
     marginBottom: SPACING.xs,
     textAlign: 'center',
   },
   heroEmptySub: {
     fontSize: FONT.sm,
-    color: COLORS.textSecondary,
+    color: '#64748B',
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: SPACING.lg,
@@ -736,11 +799,11 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full,
     overflow: 'hidden',
     width: '100%',
-    shadowColor: '#6366F1',
+    shadowColor: '#0088FF',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 4,
   },
   heroEmptyBtnGradient: {
     paddingVertical: 14,

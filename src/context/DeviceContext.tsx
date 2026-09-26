@@ -28,8 +28,17 @@ import {
   acknowledgeFallEvent,
 } from '../services/historyService';
 import { startFallAlarm, stopFallAlarm } from '../services/alarmService';
-import { syncAllowedDevicesToNative } from '../services/nativeBridgeService';
+import {
+  syncAllowedDevicesToNative,
+  getInitialNativeFallAlert,
+  subscribeNativeFallAlert,
+  dismissNotificationsNative,
+  acknowledgeFallNative,
+  acknowledgeFallDevicesNative,
+} from '../services/nativeBridgeService';
 import { useAuth } from './AuthContext';
+import * as Notifications from 'expo-notifications';
+import { navigateToDashboard } from '../navigation/navigationRef';
 
 export const STORAGE_KEY_PAIRED_DEVICES = '@healthguard_paired_devices';
 export const STORAGE_KEY_ACTIVE_DEVICE_ID = '@healthguard_active_device_id';
@@ -106,16 +115,156 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
 
   const prevFallMapRef = useRef<Record<string, boolean>>({});
   const prevFallTimeMapRef = useRef<Record<string, string>>({});
+  const acknowledgedFallTimeMapRef = useRef<Record<string, string>>({});
+  const acknowledgedAtTimestampRef = useRef<Record<string, number>>({});
+  const locallyDismissedFallMapRef = useRef<Record<string, boolean>>({});
   const prevBatteryWarnMapRef = useRef<Record<string, boolean>>({});
+  const lastAlertTriggeredTimeRef = useRef<Record<string, number>>({});
 
-  // ── Khởi tạo notifications ────────────────────────────────────────────────
+  // ── Hàm kích hoạt cảnh báo té ngã tức thì (hiển thị modal, chuyển thiết bị, bật chuông, chuyển màn hình) ──
+  const handleTriggerFallAlert = useCallback(
+    (payload: {
+      deviceId: string;
+      deviceName?: string;
+      fallTime?: string;
+      latitude?: number;
+      longitude?: number;
+      battery_pct?: number;
+    }) => {
+      const rawDevId = payload.deviceId || (payload as any).device_id;
+      if (!rawDevId) return;
+      const devId = String(rawDevId).trim();
+      const devName = payload.deviceName || (payload as any).device_name || devId;
+      const fallTime = payload.fallTime || (payload as any).fall_time || new Date().toISOString();
+      const lat = typeof payload.latitude === 'number' ? payload.latitude : 10.84;
+      const lng = typeof payload.longitude === 'number' ? payload.longitude : 106.77;
+      const battery = payload.battery_pct ?? 85;
+
+      console.log(`[DeviceContext] 🚨 TRIGGER FALL ALERT for ${devId} (${devName})`);
+      lastAlertTriggeredTimeRef.current[devId] = Date.now();
+
+      // 1. Tự động chuyển tab xem sang thiết bị bị ngã ngay lập tức
+      setActiveDeviceIdState(devId);
+      if (userActiveDeviceKey) {
+        AsyncStorage.setItem(userActiveDeviceKey, devId).catch(() => {});
+      }
+
+      // 2. Chuyển ngay màn hình sang "Tổng quan" (Dashboard)
+      navigateToDashboard();
+
+      // 3. Đặt trạng thái thiết bị là đang té ngã
+      locallyDismissedFallMapRef.current[devId] = false;
+      acknowledgedFallTimeMapRef.current[devId] = '';
+      prevFallMapRef.current[devId] = true;
+      prevFallTimeMapRef.current[devId] = fallTime;
+
+      setDevicesData((prev) => ({
+        ...prev,
+        [devId]: {
+          ...(prev[devId] || {
+            device_id: devId,
+            battery_pct: battery,
+            connected: true,
+          }),
+          device_id: devId,
+          fall_detected: true,
+          fall_time: fallTime,
+          latitude: lat,
+          longitude: lng,
+        },
+      }));
+
+      // 4. Bật chuông/rung báo động
+      startFallAlarm();
+
+      // 5. Kích hoạt Modal cảnh báo toàn màn hình ngay lập tức!
+      setActiveFallAlert({
+        deviceId: devId,
+        deviceName: devName,
+        fallTime: fallTime,
+        latitude: lat,
+        longitude: lng,
+        battery_pct: battery,
+      });
+    },
+    [userActiveDeviceKey]
+  );
+
+  // ── Khởi tạo notifications và lắng nghe sự kiện bấm thông báo ──────────────
   useEffect(() => {
+    let isMounted = true;
+
     initializeNotifications().then((success) => {
       if (success) {
         console.log('[DeviceContext] Notifications initialized');
       }
     });
-  }, []);
+
+    // 1. Kiểm tra Android Native Bridge khi app được mở từ Intent thông báo chạy ngầm
+    getInitialNativeFallAlert().then((payload) => {
+      if (!isMounted || !payload) return;
+      console.log('[DeviceContext] Initial native fall alert intent detected:', payload);
+      handleTriggerFallAlert(payload);
+    });
+
+    // 2. Lắng nghe Android Native Bridge khi nhận thông báo hoặc chạm thông báo
+    const unsubNative = subscribeNativeFallAlert((payload) => {
+      if (!isMounted || !payload) return;
+      console.log('[DeviceContext] Native fall notification event received:', payload);
+      handleTriggerFallAlert(payload);
+    });
+
+    // 3. Expo Notifications: Lắng nghe bấm vào thông báo hoặc nhận thông báo lúc đang mở app
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (!isMounted || !response) return;
+      const data = response.notification.request.content.data;
+      if (data?.type === 'fall_detected' && (data?.deviceId || data?.device_id)) {
+        console.log('[DeviceContext] Expo cold-start notification response:', data);
+        handleTriggerFallAlert({
+          deviceId: String(data.deviceId || data.device_id),
+          deviceName: String(data.deviceName || data.device_name || data.deviceId || data.device_id),
+          fallTime: data.fallTime ? String(data.fallTime) : undefined,
+          latitude: typeof data.latitude === 'number' ? data.latitude : undefined,
+          longitude: typeof data.longitude === 'number' ? data.longitude : undefined,
+        });
+      }
+    });
+
+    const subResp = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data;
+      if (data?.type === 'fall_detected' && (data?.deviceId || data?.device_id)) {
+        console.log('[DeviceContext] Expo notification tapped:', data);
+        handleTriggerFallAlert({
+          deviceId: String(data.deviceId || data.device_id),
+          deviceName: String(data.deviceName || data.device_name || data.deviceId || data.device_id),
+          fallTime: data.fallTime ? String(data.fallTime) : undefined,
+          latitude: typeof data.latitude === 'number' ? data.latitude : undefined,
+          longitude: typeof data.longitude === 'number' ? data.longitude : undefined,
+        });
+      }
+    });
+
+    const subRecv = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification.request.content.data;
+      console.log('[DeviceContext] Expo notification received in foreground:', data);
+      if (data?.type === 'fall_detected' && (data?.deviceId || data?.device_id)) {
+        handleTriggerFallAlert({
+          deviceId: String(data.deviceId || data.device_id),
+          deviceName: String(data.deviceName || data.device_name || data.deviceId || data.device_id),
+          fallTime: data.fallTime ? String(data.fallTime) : undefined,
+          latitude: typeof data.latitude === 'number' ? data.latitude : undefined,
+          longitude: typeof data.longitude === 'number' ? data.longitude : undefined,
+        });
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubNative();
+      subResp.remove();
+      subRecv.remove();
+    };
+  }, [handleTriggerFallAlert]);
 
   // ── Tải danh sách pairedDevices theo từng tài khoản Google khi đăng nhập ─────────────
   useEffect(() => {
@@ -229,34 +378,87 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
           setIsConnected(true);
           if (docSnap.exists()) {
             const data = docSnap.data() as DeviceData;
+            // ── Kiểm tra té ngã cho thiết bị này ──
+            const wasFalling = prevFallMapRef.current[dev.id] ?? false;
+            const prevFallTime = prevFallTimeMapRef.current[dev.id];
+            const currentFallTime = data.fall_time;
+
+            // 1. Nếu Firestore không ghi nhận té ngã:
+            if (!data.fall_detected) {
+              prevFallMapRef.current[dev.id] = false;
+              locallyDismissedFallMapRef.current[dev.id] = false;
+              acknowledgedFallTimeMapRef.current[dev.id] = '';
+              setDevicesData((prev) => ({
+                ...prev,
+                [dev.id]: {
+                  ...data,
+                  device_id: data.device_id || dev.id,
+                  fall_detected: false,
+                },
+              }));
+
+              setActiveFallAlert((current) =>
+                current?.deviceId === dev.id ? null : current
+              );
+              return;
+            }
+
+            // 2. Nếu Firestore có ghi nhận té ngã (data.fall_detected === true):
+            // Chỉ bỏ qua nếu chính sự cố này (cùng fall_time) vừa được người dùng bấm "Tắt cảnh báo" trên máy:
+            const isDismissed = locallyDismissedFallMapRef.current[dev.id] ?? false;
+            const ackFallTime = acknowledgedFallTimeMapRef.current[dev.id] || '';
+            const isSameDismissedFall = Boolean(
+              isDismissed && ackFallTime && currentFallTime && currentFallTime === ackFallTime
+            );
+
+            // Nếu người dùng vừa bấm tắt cho đúng sự cố này và Firestore đang trong quá trình đồng bộ:
+            if (isSameDismissedFall) {
+              setDevicesData((prev) => ({
+                ...prev,
+                [dev.id]: {
+                  ...data,
+                  device_id: data.device_id || dev.id,
+                  fall_detected: false,
+                },
+              }));
+              setActiveFallAlert((current) =>
+                current?.deviceId === dev.id ? null : current
+              );
+              return;
+            }
+
+            // 3. Sự cố té ngã THẬT SỰ ĐANG DIỄN RA:
+            locallyDismissedFallMapRef.current[dev.id] = false;
+            acknowledgedFallTimeMapRef.current[dev.id] = '';
             setDevicesData((prev) => ({
               ...prev,
               [dev.id]: {
                 ...data,
                 device_id: data.device_id || dev.id,
+                fall_detected: true,
               },
             }));
 
-            // ── Kiểm tra té ngã cho thiết bị này ──
-            const wasFalling = prevFallMapRef.current[dev.id] ?? false;
-            const prevFallTime = prevFallTimeMapRef.current[dev.id];
-            const isFalling = data.fall_detected === true;
-            const currentFallTime = data.fall_time;
-
-            // Xác định sự kiện té ngã mới:
-            // 1. Chuyển từ không té ngã sang có té ngã (isFalling && !wasFalling)
-            // 2. Hoặc vẫn đang té ngã nhưng có timestamp té ngã mới (currentFallTime !== prevFallTime)
+            // Xác định sự kiện té ngã MỚI:
             const isNewFall =
-              isFalling &&
-              (!wasFalling || (Boolean(currentFallTime) && currentFallTime !== prevFallTime));
+              !wasFalling || (Boolean(currentFallTime) && currentFallTime !== prevFallTime) || !activeFallAlert;
 
             if (isNewFall) {
               console.log(`[DeviceContext] 🚨 NEW fall detected on [${dev.id}] (${dev.name})!`);
+              prevFallMapRef.current[dev.id] = true;
               if (currentFallTime) {
                 prevFallTimeMapRef.current[dev.id] = currentFallTime;
               }
+              handleTriggerFallAlert({
+                deviceId: dev.id,
+                deviceName: dev.name,
+                fallTime: data.fall_time,
+                latitude: data.latitude,
+                longitude: data.longitude,
+                battery_pct: data.battery_pct,
+              });
+
               if (settings.notificationsEnabled) {
-                startFallAlarm();
                 sendFallNotification({
                   fallTime: data.fall_time,
                   latitude: data.latitude,
@@ -265,16 +467,6 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
                   deviceName: dev.name,
                 });
               }
-
-              // Thiết lập cảnh báo hiện hành
-              setActiveFallAlert({
-                deviceId: dev.id,
-                deviceName: dev.name,
-                fallTime: data.fall_time,
-                latitude: data.latitude,
-                longitude: data.longitude,
-                battery_pct: data.battery_pct,
-              });
 
               // Tự động lưu vào lịch sử sự cố
               const newEvent: Omit<FallEvent, 'id'> = {
@@ -298,13 +490,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
                   return exists ? prev : [saved, ...prev];
                 });
               });
-            } else if (!isFalling && wasFalling) {
-              // Nếu sự cố trên thiết bị này đã kết thúc hoặc được xác nhận
-              setActiveFallAlert((current) =>
-                current?.deviceId === dev.id ? null : current
-              );
             }
-            prevFallMapRef.current[dev.id] = isFalling;
 
             // ── Kiểm tra pin thấp ──
             const batt = data.battery_pct ?? 100;
@@ -327,7 +513,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [pairedDevices, settings.notificationsEnabled, settings.batteryThreshold]);
+  }, [pairedDevices, settings.notificationsEnabled, settings.batteryThreshold, handleTriggerFallAlert]);
 
   // ── Thêm thiết bị phần cứng mới ──────────────────────────────────────────
   const addPairedDevice = async (
@@ -437,8 +623,13 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     const nowIso = new Date().toISOString();
 
     if (fall) {
+      locallyDismissedFallMapRef.current[id] = false;
       prevFallMapRef.current[id] = true;
       prevFallTimeMapRef.current[id] = nowIso;
+      setActiveDeviceIdState(id);
+      if (userActiveDeviceKey) {
+        AsyncStorage.setItem(userActiveDeviceKey, id).catch(() => {});
+      }
 
       setDevicesData((prev) => ({
         ...prev,
@@ -452,6 +643,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
           }),
           device_id: id,
           fall_detected: true,
+          ack_fall: false,
           fall_time: nowIso,
           last_updated: nowIso,
         },
@@ -499,6 +691,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     } else {
       // Đặt lại bình thường
       prevFallMapRef.current[id] = false;
+      locallyDismissedFallMapRef.current[id] = true;
       await stopFallAlarm();
       setActiveFallAlert((current) => (current?.deviceId === id ? null : current));
 
@@ -509,6 +702,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
           [id]: {
             ...prev[id],
             fall_detected: false,
+            ack_fall: true,
             last_updated: nowIso,
           },
         };
@@ -526,6 +720,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
         {
           device_id: id,
           fall_detected: fall,
+          ack_fall: !fall,
           fall_time: nowIso,
           last_updated: nowIso,
           battery_pct: devicesData[id]?.battery_pct ?? 85,
@@ -571,33 +766,101 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
 
   // ── Xác nhận sự cố té ngã ────────────────────────────────────────────────
   const acknowledgefall = async (targetDeviceId?: string) => {
-    await stopFallAlarm();
-    const target = targetDeviceId || activeFallAlert?.deviceId || activeDeviceId;
+    console.log('[DeviceContext] 🛑 acknowledgefall called for device:', targetDeviceId);
+    await stopFallAlarm('acknowledgefall');
     setActiveFallAlert(null);
 
-    // Reset trạng thái cục bộ ngay lập tức để không bị kẹt cờ té ngã
-    if (target) {
+    // Thu thập tất cả các thiết bị cần tắt cảnh báo
+    const targetsToAck = new Set<string>();
+    if (targetDeviceId && targetDeviceId.trim()) targetsToAck.add(targetDeviceId.trim());
+    if (activeDeviceId && activeDeviceId.trim()) targetsToAck.add(activeDeviceId.trim());
+    pairedDevices.forEach((d) => {
+      if (d.id && d.id.trim()) targetsToAck.add(d.id.trim());
+    });
+    Object.keys(devicesData).forEach((id) => {
+      if (id && id.trim()) {
+        if (devicesData[id]?.fall_detected) targetsToAck.add(id.trim());
+      }
+    });
+    // Đảm bảo ESP32_FALL_001 luôn có mặt nếu người dùng đang dùng
+    if (devicesData['ESP32_FALL_001']) targetsToAck.add('ESP32_FALL_001');
+
+    const targetList = Array.from(targetsToAck);
+    console.log('[DeviceContext] Targets to acknowledge:', targetList);
+
+    const now = Date.now();
+    targetList.forEach((target) => {
+      lastAlertTriggeredTimeRef.current[target] = 0;
       prevFallMapRef.current[target] = false;
-      setDevicesData((prev) => {
-        if (!prev[target]) return prev;
-        return {
-          ...prev,
-          [target]: {
-            ...prev[target],
-            fall_detected: false,
-          },
+      locallyDismissedFallMapRef.current[target] = true;
+      acknowledgedAtTimestampRef.current[target] = now;
+      const currentFt = devicesData[target]?.fall_time || new Date().toISOString();
+      acknowledgedFallTimeMapRef.current[target] = currentFt;
+    });
+
+    // Reset trạng thái cục bộ NGAY LẬP TỨC để Dashboard và biểu tượng lập tức về bình thường
+    setDevicesData((prev) => {
+      const next = { ...prev };
+      targetList.forEach((target) => {
+        next[target] = {
+          ...(next[target] || { device_id: target, battery_pct: 85, connected: true }),
+          fall_detected: false,
+          ack_fall: true,
         };
       });
+      return next;
+    });
+
+    // 1. Gọi Native Android Firebase SDK cập nhật fall_detected = false
+    try {
+      acknowledgeFallDevicesNative(targetList);
+      targetList.forEach((target) => acknowledgeFallNative(target));
+    } catch (_nativeErr) {
+      console.warn('[DeviceContext] Error calling native acknowledge:', _nativeErr);
     }
 
+    // 2. Dismiss native Android alert notifications
+    dismissNotificationsNative();
+
+    // 3. Dismiss notifications qua expo-notifications
     try {
-      if (target) {
+      const Notifications = await import('expo-notifications');
+      await Notifications.dismissAllNotificationsAsync();
+    } catch (_e) {}
+
+    // 4. Cập nhật Firebase Firestore qua Web SDK (updateDoc + setDoc) và REST API đồng thời
+    const updatePromises = targetList.map(async (target) => {
+      // 4a. updateDoc / setDoc
+      try {
         const docRef = doc(db, 'devices', target);
-        await updateDoc(docRef, { ack_fall: true, fall_detected: false });
+        await updateDoc(docRef, { fall_detected: false, ack_fall: true }).catch(async () => {
+          await setDoc(docRef, { fall_detected: false, ack_fall: true }, { merge: true });
+        });
+        console.log(`[DeviceContext] Firestore setDoc success for ${target}`);
+      } catch (err) {
+        console.warn(`[DeviceContext] Error updating Firestore for ${target}:`, err);
       }
-    } catch (err) {
-      console.warn('[DeviceContext] Error updating ack_fall on Firestore:', err);
-    }
+
+      // 4b. Direct REST API PATCH
+      try {
+        const restUrl = `https://firestore.googleapis.com/v1/projects/doandidongtest/databases/(default)/documents/devices/${target}?updateMask.fieldPaths=fall_detected&updateMask.fieldPaths=ack_fall`;
+        await fetch(restUrl, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: {
+              fall_detected: { booleanValue: false },
+              ack_fall: { booleanValue: true },
+            },
+          }),
+        });
+        console.log(`[DeviceContext] REST PATCH success for ${target}`);
+      } catch (err) {
+        console.warn(`[DeviceContext] Error REST PATCH for ${target}:`, err);
+      }
+    });
+
+    await Promise.allSettled(updatePromises);
 
     if (fallEvents.length > 0) {
       acknowledgeEvent(fallEvents[0].id);
@@ -627,7 +890,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   const currentDeviceData = devicesData[activeDeviceId] || null;
 
   const resolvedDeviceData: DeviceData | null =
-    activeFallAlert && activeFallData
+    activeFallAlert && activeFallData && activeFallData.fall_detected
       ? {
           ...activeFallData,
           fall_detected: true,

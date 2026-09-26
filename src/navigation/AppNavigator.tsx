@@ -11,6 +11,7 @@ import MapScreen from '../screens/Mapscreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import FallAlertModal from '../components/FallAlertModal';
+import { navigationRef } from './navigationRef';
 import { useDevice } from '../context/DeviceContext';
 import { COLORS, FONT, RADIUS, SPACING } from '../constants/theme';
 
@@ -40,14 +41,14 @@ function CustomTabBar({ state, descriptors, navigation }: TabBarProps) {
     <View style={[styles.tabBarWrapper, { paddingBottom: insets.bottom }]}>
       {/* Gradient blur overlay */}
       <LinearGradient
-        colors={['rgba(13,17,23,0)', 'rgba(13,17,23,0.98)']}
+        colors={['rgba(244,248,253,0)', 'rgba(244,248,253,0.95)']}
         style={styles.tabGradient}
         pointerEvents="none"
       />
 
       <View style={[styles.tabBar]}>
         <LinearGradient
-          colors={['#1C2333', '#161B22']}
+          colors={['#FFFFFF', '#FFFFFF']}
           style={StyleSheet.absoluteFill}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
@@ -124,21 +125,23 @@ function CustomTabBar({ state, descriptors, navigation }: TabBarProps) {
 
 export default function AppNavigator() {
   return (
-    <NavigationContainer>
-      <Tab.Navigator
-        tabBar={(props) => <CustomTabBar {...props} />}
-        screenOptions={{
-          headerShown: false,
-          animation: 'shift',
-        }}
-      >
-        <Tab.Screen name="Tổng quan" component={DashboardScreen} />
-        <Tab.Screen name="Bản đồ" component={MapScreen} />
-        <Tab.Screen name="Lịch sử" component={HistoryScreen} />
-        <Tab.Screen name="Cài đặt" component={SettingsScreen} />
-      </Tab.Navigator>
+    <View style={{ flex: 1 }}>
+      <NavigationContainer ref={navigationRef}>
+        <Tab.Navigator
+          tabBar={(props) => <CustomTabBar {...props} />}
+          screenOptions={{
+            headerShown: false,
+            animation: 'shift',
+          }}
+        >
+          <Tab.Screen name="Tổng quan" component={DashboardScreen} />
+          <Tab.Screen name="Bản đồ" component={MapScreen} />
+          <Tab.Screen name="Lịch sử" component={HistoryScreen} />
+          <Tab.Screen name="Cài đặt" component={SettingsScreen} />
+        </Tab.Navigator>
+      </NavigationContainer>
       <FallAlertModal />
-    </NavigationContainer>
+    </View>
   );
 }
 
@@ -162,14 +165,15 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     borderRadius: RADIUS.xxl,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: '#E2E8F0',
     overflow: 'hidden',
     height: 64,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.4,
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
     shadowRadius: 16,
-    elevation: 16,
+    elevation: 8,
+    backgroundColor: '#FFFFFF',
   },
   activePill: {
     position: 'absolute',
@@ -188,11 +192,11 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   tabIconWrap: { position: 'relative' },
-  tabIcon: { fontSize: 22, opacity: 0.4 },
+  tabIcon: { fontSize: 22, opacity: 0.5 },
   tabIconActive: { opacity: 1 },
   tabLabel: { fontSize: FONT.xs, marginTop: 2, fontWeight: '600' },
   tabLabelActive: { color: COLORS.primary },
-  tabLabelInactive: { color: COLORS.textTertiary },
+  tabLabelInactive: { color: '#94A3B8' },
   badge: {
     position: 'absolute',
     top: -4,
@@ -204,7 +208,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#1C2333',
+    borderColor: '#FFFFFF',
   },
   badgeText: { fontSize: 9, color: '#fff', fontWeight: '900' },
 });

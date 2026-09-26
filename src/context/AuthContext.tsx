@@ -13,6 +13,8 @@ import {
   saveGoogleUser,
   logoutGoogleUser,
   loginWithCredentials,
+  activateAccountWithCode,
+  updateMonitoredDevice,
 } from '../services/authService';
 
 interface AuthContextType {
@@ -20,6 +22,12 @@ interface AuthContextType {
   isLoading: boolean;
   login: (user: UserProfile) => Promise<UserProfile>;
   loginWithPassword: (email: string, pass: string) => Promise<UserProfile>;
+  activateAccount: (
+    email: string,
+    code: string,
+    profile?: Partial<UserProfile>
+  ) => Promise<UserProfile>;
+  updateUserDevice: (newEspId: string | null) => Promise<UserProfile>;
   logout: () => Promise<void>;
   reloadUser: () => Promise<void>;
 }
@@ -30,44 +38,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  const backgroundTimestampRef = useRef<number | null>(null);
 
-  // 1. Mỗi khi khởi động/vào app (cold start), bắt buộc đăng nhập Gmail (không tự động đăng nhập)
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
+
+  // 1. Khi khởi động app, tự động khôi phục phiên đăng nhập đã lưu (nếu có)
   useEffect(() => {
-    logoutGoogleUser().finally(() => {
-      setUser(null);
-      setIsLoading(false);
-    });
+    getStoredGoogleUser()
+      .then((stored) => {
+        setUser(stored);
+      })
+      .catch(() => {
+        setUser(null);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   }, []);
 
-  // 2. Theo dõi trạng thái ứng dụng: Nếu app chạy nền quá 3 phút, yêu cầu đăng nhập lại
+  // 2. Theo dõi AppState chỉ để logging (không tự động logout khi vào background)
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-      if (
-        appStateRef.current === 'active' &&
-        (nextAppState === 'inactive' || nextAppState === 'background')
-      ) {
-        backgroundTimestampRef.current = Date.now();
-      }
-
-      if (
-        (appStateRef.current === 'inactive' || appStateRef.current === 'background') &&
-        nextAppState === 'active'
-      ) {
-        // Nếu chuyển từ nền quay lại app sau hơn 3 phút, hủy phiên đăng nhập
-        if (backgroundTimestampRef.current) {
-          const diffMinutes = (Date.now() - backgroundTimestampRef.current) / (1000 * 60);
-          if (diffMinutes >= 3) {
-            console.log('[AuthContext] Background timeout exceeded, forcing re-login');
-            logoutGoogleUser().finally(() => {
-              setUser(null);
-            });
-          }
-        }
-        backgroundTimestampRef.current = null;
-      }
-
+      console.log('[AuthContext] AppState changed:', appStateRef.current, '->', nextAppState);
       appStateRef.current = nextAppState;
     });
 
@@ -97,6 +89,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return profile;
   }, []);
 
+  const activateAccount = useCallback(
+    async (email: string, code: string, profile?: Partial<UserProfile>) => {
+      const updated = await activateAccountWithCode(email, code, profile);
+      setUser(updated);
+      return updated;
+    },
+    []
+  );
+
+  const updateUserDevice = useCallback(
+    async (newEspId: string | null) => {
+      if (!user?.email) throw new Error('Chưa đăng nhập');
+      const updated = await updateMonitoredDevice(user.email, newEspId);
+      setUser(updated);
+      return updated;
+    },
+    [user?.email]
+  );
+
   const logout = useCallback(async () => {
     await logoutGoogleUser();
     setUser(null);
@@ -109,6 +120,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         login,
         loginWithPassword,
+        activateAccount,
+        updateUserDevice,
         logout,
         reloadUser,
       }}

@@ -83,10 +83,10 @@ export default function AddDeviceModal({ visible, onClose }: AddDeviceModalProps
 
         <View style={[styles.modalSheet, SHADOW.lg]}>
           <LinearGradient
-            colors={['#1F2937', '#111827']}
+            colors={['#FFFFFF', '#FFFFFF']}
             style={StyleSheet.absoluteFill}
             start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
+            end={{ x: 1, y: 1 }}
           />
 
           {/* Header handle */}
@@ -117,7 +117,7 @@ export default function AddDeviceModal({ visible, onClose }: AddDeviceModalProps
               <TextInput
                 style={styles.textInput}
                 placeholder="VD: ESP32_FALL_002"
-                placeholderTextColor="rgba(255,255,255,0.3)"
+                placeholderTextColor="#94A3B8"
                 value={deviceId}
                 onChangeText={setDeviceId}
                 autoCapitalize="characters"
@@ -145,7 +145,7 @@ export default function AddDeviceModal({ visible, onClose }: AddDeviceModalProps
               <TextInput
                 style={styles.textInput}
                 placeholder="VD: Cảm biến Cụ Bà (Phòng ngủ)"
-                placeholderTextColor="rgba(255,255,255,0.3)"
+                placeholderTextColor="#94A3B8"
                 value={deviceName}
                 onChangeText={setDeviceName}
               />
@@ -214,13 +214,14 @@ const styles = StyleSheet.create({
     borderTopRightRadius: RADIUS.xl,
     overflow: 'hidden',
     maxHeight: '85%',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: '#E2E8F0',
   },
   dragHandle: {
     width: 40,
     height: 4,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#CBD5E1',
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: SPACING.sm,
@@ -239,32 +240,32 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(79,70,229,0.2)',
+    backgroundColor: 'rgba(0,136,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(79,70,229,0.4)',
+    borderColor: 'rgba(0,136,255,0.25)',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
   modalSub: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.6)',
+    color: '#64748B',
     marginTop: 2,
   },
   closeBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
   },
   closeBtnText: {
-    color: 'rgba(255,255,255,0.7)',
+    color: '#64748B',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -274,19 +275,19 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.7)',
+    color: '#475569',
     letterSpacing: 0.8,
     marginBottom: SPACING.xs,
   },
   textInput: {
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: '#E2E8F0',
     borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
   chipRow: {
     flexDirection: 'row',
@@ -295,32 +296,32 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   chip: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: '#F1F5F9',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: RADIUS.full,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: '#E2E8F0',
   },
   chipActive: {
-    backgroundColor: 'rgba(79,70,229,0.3)',
-    borderColor: '#6366F1',
+    backgroundColor: 'rgba(0,136,255,0.12)',
+    borderColor: '#0088FF',
   },
   chipText: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.65)',
+    color: '#475569',
   },
   chipTextActive: {
-    color: '#818CF8',
+    color: '#0088FF',
     fontWeight: '600',
   },
   infoBanner: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(59,130,246,0.12)',
+    backgroundColor: 'rgba(0,136,255,0.08)',
     padding: SPACING.md,
     borderRadius: RADIUS.md,
     borderWidth: 1,
-    borderColor: 'rgba(59,130,246,0.25)',
+    borderColor: 'rgba(0,136,255,0.2)',
     marginBottom: SPACING.xl,
   },
   infoIcon: {
@@ -330,7 +331,7 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#475569',
     lineHeight: 18,
   },
   submitBtn: {
