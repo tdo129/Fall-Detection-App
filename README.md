@@ -1,10 +1,10 @@
 # CareDrop - Hệ Thống Cảnh Báo Té Ngã & Giám Sát Sức Khỏe Thông Minh
 
 Tài liệu lưu đồ hoạt động hệ thống CareDrop được thiết kế theo tỷ lệ **chuẩn hóa cho báo cáo Word / Đồ án**:
+* Toàn bộ sơ đồ sử dụng **định dạng khung trắng viền đen (Monochrome/Black & White)**, các khối nhóm có **đường viền nét đứt (dashed)** và các **đường mũi tên đi thẳng (linear)** theo đúng quy chuẩn báo cáo kỹ thuật.
 * Kích thước mỗi sơ đồ **thu gọn vừa vặn trong 1 trang Word** (khoảng 1/2 đến 2/3 trang A4).
 * Phông chữ to, nét đậm, chữ ít và cô đọng giúp **chụp màn hình dán vào Word không bị mờ hay chữ bé xíu**.
 * Đầy đủ 100% chức năng của **3 phân quyền** (*Quản trị viên, Người giám sát, Người được giám sát*) và sự tương tác giữa các bên.
-* Toàn bộ sơ đồ sử dụng văn bản thuần túy, không chèn biểu tượng/icon để đảm bảo tính trang trọng trong văn bản báo cáo.
 
 ---
 
@@ -13,7 +13,7 @@ Tài liệu lưu đồ hoạt động hệ thống CareDrop được thiết k�
 Lưu đồ kiến trúc phân khối chức năng và cơ chế tương tác giữa Giao diện, Quản lý trạng thái, Dịch vụ nền và Cơ sở dữ liệu:
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '15px' }}}%%
+%%{init: {'flowchart': {'curve': 'linear'}, 'themeVariables': {'fontSize': '15px', 'lineColor': '#000000'}}}%%
 flowchart TD
     subgraph UI_BLOCK ["KHỐI GIAO DIỆN VÀ ĐIỀU HƯỚNG"]
         NAV["<b>ĐIỀU HƯỚNG</b><br/>App.tsx / AppNavigator"] -- "hiển thị" --> SCREENS["<b>MÀN HÌNH VÀ HỘP THOẠI</b><br/>Admin • Giám sát • Người được giám sát"]
@@ -44,17 +44,24 @@ flowchart TD
     BG <--> FS
     DATA_SVC <--> FS
 
-    style UI_BLOCK fill:#fcfcfc,stroke:#333333,stroke-width:1.5px,stroke-dasharray: 5 5
-    style STATE_BLOCK fill:#fcfcfc,stroke:#333333,stroke-width:1.5px,stroke-dasharray: 5 5
-    style SERVICE_APP fill:#fcfcfc,stroke:#333333,stroke-width:1.5px,stroke-dasharray: 5 5
-    style SERVICE_BG fill:#fcfcfc,stroke:#333333,stroke-width:1.5px,stroke-dasharray: 5 5
-    style FS fill:#ffffff,stroke:#333333,stroke-width:1.5px
+    style UI_BLOCK fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style STATE_BLOCK fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style SERVICE_APP fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style SERVICE_BG fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style NAV fill:#ffffff,stroke:#000000,stroke-width:1px
+    style SCREENS fill:#ffffff,stroke:#000000,stroke-width:1px
+    style AUTH fill:#ffffff,stroke:#000000,stroke-width:1px
+    style DEV fill:#ffffff,stroke:#000000,stroke-width:1px
+    style DATA_SVC fill:#ffffff,stroke:#000000,stroke-width:1px
+    style BRIDGE fill:#ffffff,stroke:#000000,stroke-width:1px
+    style BG fill:#ffffff,stroke:#000000,stroke-width:1px
+    style FS fill:#ffffff,stroke:#000000,stroke-width:1px
 ```
 
 ### 1.1. Chi Tiết Phân Luồng 3 Vai Trò Người Dùng
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '15px' }}}%%
+%%{init: {'flowchart': {'curve': 'linear'}, 'themeVariables': {'fontSize': '15px', 'lineColor': '#000000'}}}%%
 flowchart TD
     A["<b>KHỞI ĐỘNG ỨNG DỤNG</b><br/>AuthContext"] --> B{"<b>KIỂM TRA PHIÊN</b>"}
 
@@ -63,12 +70,12 @@ flowchart TD
     B -- "Quyền Người được giám sát" --> C3["<b>NGƯỜI ĐƯỢC GIÁM SÁT</b><br/>MonitoredScreen"]
     B -- "Quyền Người giám sát" --> C4["<b>NGƯỜI GIÁM SÁT</b><br/>AppNavigator (4 Tabs)"]
 
-    style A fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
-    style B fill:#fff9c4,stroke:#fbc02d,stroke-width:2px
-    style C1 fill:#f5f5f5,stroke:#757575,stroke-width:1.5px
-    style C2 fill:#ede7f6,stroke:#512da8,stroke-width:1.5px
-    style C3 fill:#fffde7,stroke:#fbc02d,stroke-width:1.5px
-    style C4 fill:#e1f5fe,stroke:#0288d1,stroke-width:1.5px
+    style A fill:#ffffff,stroke:#000000,stroke-width:1px
+    style B fill:#ffffff,stroke:#000000,stroke-width:1px
+    style C1 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style C2 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style C3 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style C4 fill:#ffffff,stroke:#000000,stroke-width:1px
 ```
 
 ---
@@ -78,7 +85,7 @@ flowchart TD
 Luồng tương tác xác thực email bảo mật giữa Người dùng, Quản trị viên và Dịch vụ Email:
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '15px' }}}%%
+%%{init: {'flowchart': {'curve': 'linear'}, 'themeVariables': {'fontSize': '15px', 'lineColor': '#000000'}}}%%
 flowchart TD
     subgraph P1 ["1. ĐĂNG KÝ TÀI KHOẢN"]
         U1["<b>NGƯỜI DÙNG</b><br/>Nhập Email, SĐT, Chọn quyền"] --> S1["<b>FIRESTORE</b><br/>Lưu: pending_approval"]
@@ -99,13 +106,19 @@ flowchart TD
         S3 -- "Đúng" --> U3["<b>KÍCH HOẠT THÀNH CÔNG</b><br/>Chuyển active • Vào app"]
     end
 
-    style P1 fill:#e8f5e9,stroke:#388e3c,stroke-width:1.5px
-    style P2 fill:#ede7f6,stroke:#512da8,stroke-width:1.5px
-    style P3 fill:#e1f5fe,stroke:#0288d1,stroke-width:1.5px
-    style A2 fill:#fff9c4,stroke:#fbc02d,stroke-width:1.5px
-    style S3 fill:#fff9c4,stroke:#fbc02d,stroke-width:1.5px
-    style U3 fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
-    style A3 fill:#ffcdd2,stroke:#c62828,stroke-width:1.5px
+    style P1 fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style P2 fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style P3 fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style U1 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style S1 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style A1 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style A2 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style A3 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style A4 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style S2 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style U2 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style S3 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style U3 fill:#ffffff,stroke:#000000,stroke-width:1px
 ```
 
 ---
@@ -115,7 +128,7 @@ flowchart TD
 Lưu đồ xử lý chính khi ứng dụng hoạt động (Hình 3.10 - Quản lý thiết bị, vòng đời đăng ký và cập nhật cảnh báo):
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '15px' }}}%%
+%%{init: {'flowchart': {'curve': 'linear'}, 'themeVariables': {'fontSize': '15px', 'lineColor': '#000000'}}}%%
 flowchart TD
     subgraph G1 ["1. QUẢN LÝ GHÉP NỐI & ĐĂNG KÝ DỮ LIỆU"]
         DEV_ACT["<b>THÊM / BỎ GHÉP THIẾT BỊ</b><br/>Lưu danh sách theo tài khoản"] --> SUB_ON["<b>ĐĂNG KÝ THEO DÕI TÀI LIỆU</b><br/>Lắng nghe trạng thái trên Firestore"]
@@ -139,14 +152,20 @@ flowchart TD
         M_SIDE ==> SYNC
     end
 
-    style G1 fill:#e8f5e9,stroke:#388e3c,stroke-width:1.5px
-    style G2 fill:#e1f5fe,stroke:#0288d1,stroke-width:1.5px
-    style G3 fill:#fff3e0,stroke:#e65100,stroke-width:1.5px
-    style HW fill:#ffebee,stroke:#c62828,stroke-width:2px
-    style FB fill:#fff8e1,stroke:#ffa000,stroke-width:2px
-    style NOTIF fill:#f3e5f5,stroke:#7b1fa2,stroke-width:1.5px
-    style SYNC fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
-    style CHK fill:#fff9c4,stroke:#fbc02d,stroke-width:1.5px
+    style G1 fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style G2 fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style G3 fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style DEV_ACT fill:#ffffff,stroke:#000000,stroke-width:1px
+    style SUB_ON fill:#ffffff,stroke:#000000,stroke-width:1px
+    style HW fill:#ffffff,stroke:#000000,stroke-width:1px
+    style FB fill:#ffffff,stroke:#000000,stroke-width:1px
+    style DM fill:#ffffff,stroke:#000000,stroke-width:1px
+    style NOTIF fill:#ffffff,stroke:#000000,stroke-width:1px
+    style CHK fill:#ffffff,stroke:#000000,stroke-width:1px
+    style ALARM fill:#ffffff,stroke:#000000,stroke-width:1px
+    style ACK_S fill:#ffffff,stroke:#000000,stroke-width:1px
+    style M_SIDE fill:#ffffff,stroke:#000000,stroke-width:1px
+    style SYNC fill:#ffffff,stroke:#000000,stroke-width:1px
 ```
 
 ---
@@ -156,7 +175,7 @@ flowchart TD
 ### 4.1. Nghiệp Vụ Quản Trị Viên (Admin)
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '15px' }}}%%
+%%{init: {'flowchart': {'curve': 'linear'}, 'themeVariables': {'fontSize': '15px', 'lineColor': '#000000'}}}%%
 flowchart TD
     A0["<b>MÀN HÌNH QUẢN TRỊ</b><br/>AdminScreen"] --> A1{"<b>CHỌN TÁC VỤ</b>"}
 
@@ -178,9 +197,17 @@ flowchart TD
     A1 --> TAB1
     A1 --> TAB2
 
-    style A0 fill:#ede7f6,stroke:#512da8,stroke-width:2px
-    style TAB1 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:1.5px
-    style TAB2 fill:#ede7f6,stroke:#512da8,stroke-width:1.5px
+    style TAB1 fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style TAB2 fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style A0 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style A1 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style B1 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style B2 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style B3 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style C1 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style C2 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style C3 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style C4 fill:#ffffff,stroke:#000000,stroke-width:1px
 ```
 
 ---
@@ -188,7 +215,7 @@ flowchart TD
 ### 4.2. Nghiệp Vụ Người Giám Sát (Supervisor)
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '15px' }}}%%
+%%{init: {'flowchart': {'curve': 'linear'}, 'themeVariables': {'fontSize': '15px', 'lineColor': '#000000'}}}%%
 flowchart TD
     S0["<b>DASHBOARD GIÁM SÁT</b><br/>Chạy ngầm 24/7 (FallMonitoringService)"] --> S_TAB{"<b>CHỨC NĂNG</b>"}
 
@@ -208,9 +235,15 @@ flowchart TD
     S_TAB --> G1
     S_TAB --> G2
 
-    style S0 fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
-    style G1 fill:#e0f7fa,stroke:#00838f,stroke-width:1.5px
-    style G2 fill:#ffebee,stroke:#c62828,stroke-width:1.5px
+    style G1 fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style G2 fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style S0 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style S_TAB fill:#ffffff,stroke:#000000,stroke-width:1px
+    style D1 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style D2 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style M1 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style M2 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style M3 fill:#ffffff,stroke:#000000,stroke-width:1px
 ```
 
 ---
@@ -218,7 +251,7 @@ flowchart TD
 ### 4.3. Nghiệp Vụ Người Được Giám Sát (Monitored Person)
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '15px' }}}%%
+%%{init: {'flowchart': {'curve': 'linear'}, 'themeVariables': {'fontSize': '15px', 'lineColor': '#000000'}}}%%
 flowchart TD
     M0["<b>GIAO DIỆN NGƯỜI ĐƯỢC GIÁM SÁT</b><br/>MonitoredScreen"] --> M_CHECK{"<b>THIẾT BỊ?</b>"}
 
@@ -239,9 +272,16 @@ flowchart TD
     M_CHECK -- "Chưa ghép" --> DEV
     M_CHECK -- "Đã kết nối" --> RUN
 
-    style M0 fill:#fffde7,stroke:#fbc02d,stroke-width:2px
-    style DEV fill:#fff8e1,stroke:#ffa000,stroke-width:1.5px
-    style RUN fill:#ffebee,stroke:#d84315,stroke-width:1.5px
+    style DEV fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style RUN fill:#ffffff,stroke:#000000,stroke-width:1px,stroke-dasharray: 4 4
+    style M0 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style M_CHECK fill:#ffffff,stroke:#000000,stroke-width:1px
+    style E1 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style E2 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style E3 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style R1 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style R2 fill:#ffffff,stroke:#000000,stroke-width:1px
+    style R3 fill:#ffffff,stroke:#000000,stroke-width:1px
 ```
 
 ---
