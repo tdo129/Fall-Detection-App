@@ -8,9 +8,50 @@ Tài liệu lưu đồ hoạt động hệ thống CareDrop được thiết k�
 
 ---
 
-## 1. Điều Hướng & Kiến Trúc Phân Quyền (Navigation & Roles)
+## 1. Kiến Trúc Khối & Điều Hướng Hệ Thống (Architecture & Navigation)
 
-Lưu đồ phân luồng giao diện sau khi khởi động app dựa trên phiên đăng nhập và vai trò người dùng:
+Lưu đồ kiến trúc phân khối chức năng và cơ chế tương tác giữa Giao diện, Quản lý trạng thái, Dịch vụ nền và Cơ sở dữ liệu:
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '15px' }}}%%
+flowchart TD
+    subgraph UI_BLOCK ["KHỐI GIAO DIỆN VÀ ĐIỀU HƯỚNG"]
+        NAV["<b>ĐIỀU HƯỚNG</b><br/>App.tsx / AppNavigator"] -- "hiển thị" --> SCREENS["<b>MÀN HÌNH VÀ HỘP THOẠI</b><br/>Admin • Giám sát • Người được giám sát"]
+    end
+
+    subgraph STATE_BLOCK ["KHỐI QUẢN LÍ TRẠNG THÁI"]
+        AUTH["<b>PHIÊN VÀ VAI TRÒ</b><br/>AuthContext"]
+        DEV["<b>THIẾT BỊ GIÁM SÁT</b><br/>DeviceContext"]
+    end
+
+    subgraph SERVICE_APP ["KHỐI DỊCH VỤ"]
+        DATA_SVC["<b>DỮ LIỆU, LỊCH SỬ VÀ THÔNG BÁO</b><br/>alarmService • notificationService"]
+    end
+
+    subgraph SERVICE_BG ["KHỐI DỊCH VỤ"]
+        BRIDGE["<b>CẦU NỐI VỚI ỨNG DỤNG</b><br/>CareDropBridgeModule"]
+        BG["<b>GIÁM SÁT NỀN</b><br/>FallMonitoringService"]
+        BRIDGE --> BG
+    end
+
+    FS["<b>DỮ LIỆU FIRESTORE</b><br/>Cloud Firestore"]
+
+    NAV -- "phiên" --> AUTH
+    NAV -- "state" --> DEV
+    DEV -- "gọi server" --> DATA_SVC
+
+    DATA_SVC --> BRIDGE
+    BG <--> FS
+    DATA_SVC <--> FS
+
+    style UI_BLOCK fill:#fcfcfc,stroke:#333333,stroke-width:1.5px,stroke-dasharray: 5 5
+    style STATE_BLOCK fill:#fcfcfc,stroke:#333333,stroke-width:1.5px,stroke-dasharray: 5 5
+    style SERVICE_APP fill:#fcfcfc,stroke:#333333,stroke-width:1.5px,stroke-dasharray: 5 5
+    style SERVICE_BG fill:#fcfcfc,stroke:#333333,stroke-width:1.5px,stroke-dasharray: 5 5
+    style FS fill:#ffffff,stroke:#333333,stroke-width:1.5px
+```
+
+### 1.1. Chi Tiết Phân Luồng 3 Vai Trò Người Dùng
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '15px' }}}%%
